@@ -33,15 +33,15 @@
 
 ## 6.1 实验4的基础知识
 
-本章我们将首先以Linux的文件系统为例介绍文件系统的基础知识，接着讲述 riscv-pke操作系统内核的文件系统设计，然后开始实验五的几个实验以加深读者对文件系统底层逻辑的理解。
+本章我们将首先以Linux的文件系统为例介绍文件系统的基础知识，接着讲述 riscv-pke操作系统内核的文件系统设计，然后开始对PKE实验4的基础实验进行讲解，以加深读者对文件系统底层逻辑的理解。
 
 <a name="filesystem"></a>
 
 ### 6.1.1 文件系统概述
 
-文件系统是操作系统用于存储、组织和访问计算机数据的方法，它使得用户可以通过一套便利的文件访问接口，来访问存储设备（常见的是磁盘，也有基于NAND Flash的固态硬盘）或分区上的文件。操作系统中负责管理和存储文件信息的**软件机构**称为文件管理系统，简称**文件系统**。 文件系统所管理的最基本的单位，是有具体且完整逻辑意义的“**文件**”，文件系统实现了对文件的按名（即文件名）存取。为避免“重名”问题，文件系统的常用方法是采用树型目录，来辅助（通过加路径）实现文件的按名存取。存储在磁盘上，实现树型目录的数据结构（如目录文件等），往往被称为“**元数据**”（meta-data）。实际上文件系统中，辅助实现对文件进行检索和存储的数据，都被称为元数据。从这个角度来看，文件系统中对磁盘空间进行管理的数据，以及可能的缓存数据，也都是重要的元数据。
+文件系统是操作系统用于存储、组织和访问计算机数据的方法，它使得用户可以通过一套便利的文件访问接口，来访问存储设备（常见的是磁盘，也有基于NAND Flash的固态硬盘）或分区上的文件。操作系统中负责管理和存储文件信息的**软件机构**称为文件管理系统，简称文件系统。 文件系统所管理的最基本的单位，是有具体且完整逻辑意义的“文件”，文件系统实现了对文件的按名（即文件名）存取。为避免“重名”问题，文件系统的常用方法是采用树型目录，来辅助（通过加路径）实现文件的按名存取。存储在磁盘上，实现树型目录的数据结构（如目录文件等），往往被称为“**元数据**”（meta-data）。实际上文件系统中，辅助实现对文件进行检索和存储的数据，都被称为元数据。从这个角度来看，文件系统中对磁盘空间进行管理的数据，以及可能的缓存数据，也都是重要的元数据。
 
-虽然功能都是对文件进行管理，但不同的文件系统往往采用不同种类的元数据来完成既定功能。对不同类型元数据的采用，往往也区分了不同类型的文件系统。例如，Linux中的ext系列文件系统，Windows中广泛采用的fat系列文件系统，以及NTFS文件系统等。虽然完成的功能一样，但它们在具体实现上却也存在巨大差异。由于PKE实验采用了spike模拟器，它具有和主机进行交互的htif接口，所以在实验四，我们将自然接触到一类很特殊的文件系统**hostfs**（Host File System）。它实际上是位于主机上的文件系统，PKE通过定义一组接口使得在spike所构造的虚拟risc-v机器上运行的应用，能够对主机上文件进行访问。另外，我们将分配一段内存作为我们的“磁盘”（即RAM Disk），并在该磁盘上创建一个简单的，名称为**RFS**（Ramdisk File System）的文件系统。
+不同的文件系统往往采用不同种类的元数据来完成既定功能。对不同类型元数据的采用，往往也区分了不同类型的文件系统。例如，Linux中的ext系列文件系统，Windows中广泛采用的fat系列文件系统、NTFS文件系统等。虽然完成的功能一样，但它们在具体实现上却也存在巨大差异。由于PKE实验采用了Spike模拟器，它具有和主机进行交互的HTIF接口，所以在PKE实验4，我们将自然接触到一类很特殊的文件系统hostfs（Host File System）。它实际上是位于主机上的文件系统，PKE通过定义一组接口使得在Spike所构造的虚拟RISC-V机器上运行的应用，能够对主机上文件进行访问。另外，我们将分配一段内存作为我们的“磁盘”（即RAM Disk），并在该磁盘上创建一个简单的，名称为RFS（Ramdisk File System）的文件系统。
 
 由于有多个文件系统的存在，且PKE需要同时对这两类文件系统进行支持。所以，在PKE的实验四，我们引入了**虚拟文件系统**（Virtual File System，有时也被称为Virtual Filesystem Switch，简称都是**VFS**）的概念。VFS也是构建现代操作系统中文件系统的重要概念，通过实验四，读者将对这一重要概念进行学习。在后面的讨论中，我们将依次介绍[PKE的文件系统架构](#pke_fs)、了解[PKE文件系统对进程所提供的接口](#fs_interface)、[虚拟文件系统的构造](#vfs)，以及我们自己定义的[RFS文件系统](#rfs)。目标是辅助读者构建对PKE文件系统代码的理解，为完成后续的基础和挑战实验做好准备。
 
@@ -49,13 +49,9 @@
 
 ### 6.1.2 PKE的文件系统架构
 
-文件系统中存储数据的基本数据单位是文件，然而不同类型的文件系统对于文件在存储设备上的组织方式可能采用不同的物理结构，以及不同的访问接口。 文件系统的种类众多（例如PKE系统中的hostfs和RFS），而操作系统希望**对用户提供一个统一的接口，隐藏不同文件系统之间的差异**，于是在用户层与文件系统层引入了一个中间层，这个中间层就称为**虚拟文件系统（简称VFS）** 。
-
-VFS 定义了一组所有文件系统都支持的数据结构和标准接口，这样程序员在访问文件系统时，不需要了解底层文件系统的工作原理，只需要通过 VFS 提供的统一接口进行访问即可。PKE的VFS存在于内核态，用户在用户态使用open、read等函数操作文件时，总是通过VFS操作处于具体文件系统的文件。
+PKE文件系统架构如下图所示，图中的RAM DISK在文件系统中的地位等价于磁盘设备，在其上“安装”的文件系统就是RFS。特别要注意的一点是，在后文讨论RFS时，会存在“某种数据结构被保存在磁盘中”这样的表述，这通常意味着这种数据结构实际上被保存在上图的RAM DISK中。除了RFS外，PKE文件系统通过虚拟文件系统对主机文件系统hostfs进行了支持，在riscv-pke操作系统内核上运行的应用程序能够对这两个文件系统中的文件进行访问。
 
 <img src="pictures/lab4.pke_fs_architecture.png" alt="1660396457538" style="zoom: 70%;" />
-
-PKE文件系统的基本架构与Linux的类似，部分功能进行了简化，对于外存磁盘部分，为了教学方便，以RAM（内存）来模拟替代磁盘，对磁盘的相关操作都转化成对内存的相关操作。图中的RAM DISK在文件系统中的地位等价于磁盘设备。特别要注意的一点是，在后文讨论RFS时，会存在“某种数据结构被保存在磁盘中”这样的表述，这通常意味着这种数据结构实际上被保存在上图的RAM DISK中。
 
 在PKE系统启动时，会在初始化阶段将这两个文件系统进行挂载，见kernel/kernel.c文件中对S模式的启动代码的修改：
 
@@ -224,7 +220,7 @@ PKE文件系统的基本架构与Linux的类似，部分功能进行了简化，
  78 }process;
 ```
 
-在进程定义的77行，增加了一个proc_file_management指针类型的成员pfile。在实验四，每当创建一个进程时，都会调用kernel/proc_file.c中定义的函数init_proc_file_management()，来对该进程（将来）要打开的文件进行管理。该函数的定义如下：
+我们看到在进程定义的77行，增加了一个proc_file_management指针类型的成员pfile。这样，每当创建一个进程时，都会调用kernel/proc_file.c中定义的函数init_proc_file_management()，来对该进程（将来）要打开的文件进行管理。该函数的定义如下：
 
 ```c
 41 proc_file_management *init_proc_file_management(void) {
@@ -241,9 +237,7 @@ PKE文件系统的基本架构与Linux的类似，部分功能进行了简化，
 52 }
 ```
 
-可以看到，该函数的作用是为将要管理的“打开文件”分配一个物理页面的空间，初始当前目录（cwd）置为根目录，初始化打开文件计数（42--44行）；然后初始化所有“已打开”的文件的文件描述符fd（46--49行）。
-
-kernel/proc_file.c文件中还定义了一组接口，用于进程对文件的一系列操作。这些接口包括文件打开（do_open）、文件关闭（do_close）、文件读取（do_read）、文件写（do_write）、文件读写定位（do_lseek）、获取文件状态（do_stat），甚至获取磁盘状态（do_disk_stat）。这些接口，都是在应用程序发出对应的文件操作（如open、close、read_u等）时，通过user lib，到达do_syscall，并最后调用的。
+该函数的作用是为将要管理的“打开文件”分配一个物理页面的空间，初始当前目录（cwd）置为根目录，初始化打开文件计数（42--44行）；然后初始化所有“已打开”的文件的文件描述符fd（46--49行）。kernel/proc_file.c文件中还定义了一组接口，用于进程对文件的一系列操作。这些接口包括文件打开（do_open）、文件关闭（do_close）、文件读取（do_read）、文件写（do_write）、文件读写定位（do_lseek）、获取文件状态（do_stat），甚至获取磁盘状态（do_disk_stat）。这些接口，都是在应用程序发出对应的文件操作（如open、close、read_u等）时，通过user lib，到达do_syscall，并最后被调用的。
 
 这里，我们对其中比较典型的文件操作，如打开和文件读进行分析。我们先来观察do_open的实现（见kernel/proc_file.c）：
 
@@ -287,7 +281,7 @@ kernel/proc_file.c文件中还定义了一组接口，用于进程对文件的�
 
 我们看到，这个函数会首先对发起进程读取文件的权限进行判断，通过判断后，会继续通过调用vfs_read来实现对文件的真正的读取动作。最后，再将读取到的数据拷贝到参数buf中。
 
-实际上，PKE文件系统提供给进程的所有操作，最终都是通过调用VFS这一层的功能来最终完成它们的功能的。这里，我们鼓励读者继续阅读其他操作（如关闭文件、写文件等），来观察PKE文件系统的这一特点。接下来，我们将对PKE的虚拟文件系统进行介绍。
+实际上，PKE文件系统提供给进程的所有操作，最终都是通过调用VFS这一层的功能来最终完成它们的功能的。这里，我们鼓励读者继续阅读其他操作（如关闭文件、写文件等），来观察PKE文件系统的这一特点。
 
 <a name="vfs"></a> 
 
@@ -345,9 +339,9 @@ VFS对具体的文件系统进行了抽象，构建出一个通用的文件系�
   126 };
   ```
 
-  其中需要重点关注的是：inum、sb以及i_ops。下面分别介绍这几个字段。
+  其中需要重点关注的成员是：inum、sb以及i_ops。下面分别介绍这几个字段。
 
-  **inum**：inum用于保存一个vinode所对应的，存在于磁盘上的disk inode序号。对于存在disk inode的文件系统（如RFS）而言，inum唯一确定了该文件系统中的一个实际的文件。而对于不存在disk inode的文件系统，inum字段则不会被使用，且该文件系统需要自行提供并维护一个vinode所对应的文件在该文件系统中的“定位信息”，VFS必须能够根据该“定位信息”唯一确定此文件系统中的一个文件。这类“定位信息”由具体文件系统创建、使用（通过viop函数，后文会介绍）和释放。在PKE的实现中，hostfs就属于这种不存在inode的文件系统。实际上，主机上的文件系统同样可能是一种存在disk inode的文件系统。但是，由于我们通过HTIF接口对宿主机文件进行访问，因此并不关注宿主机上实际文件系统的情况。也就是说，我们并没有通过宿主机上的文件系统的disk inode对文件进行访问。在这种情况下，hostfs中一个文件的“定位信息”就是一个spike_file_t结构体（定义在spike_interface/spike_file.h中）：
+  **inum**：inum用于保存一个vinode所对应的，存在于磁盘上的disk inode序号。对于存在disk inode的文件系统（如RFS）而言，inum唯一确定了该文件系统中的一个实际的文件。而对于不存在disk inode的文件系统（如hostfs），inum字段则不会被使用，且该文件系统需要自行提供并维护一个vinode所对应的文件在该文件系统中的“定位信息”，VFS必须能够根据该“定位信息”唯一确定此文件系统中的一个文件。这类“定位信息”由具体文件系统创建、使用（通过viop函数，后文会介绍）和释放。实现上，PKE为一个hostfs所设计的 “定位信息”就是一个spike_file_t结构体（定义在spike_interface/spike_file.h中）：
 
   ```c
   09 typedef struct file_t {
@@ -356,17 +350,17 @@ VFS对具体的文件系统进行了抽象，构建出一个通用的文件系�
   12 } spike_file_t;
   ```
 
-  其保存了宿主机中一个打开文件的文件描述符，该spike_file_t结构体的地址会被保存在vinode的i_fs_info字段中。
+  该结构体保存了宿主机中一个打开文件的文件描述符，结构体的首地址会被保存在vinode的i_fs_info字段中。
 
-  **sb**：vinode中的sb则用来记录inode所在的文件系统对应的超级块，超级块唯一确定了vinode对应的文件系统。后文会对super_block对象进行更详细的介绍。
+  **sb**：vinode中的sb字段是struct super_block类型，它用来记录inode所在的文件系统对应的超级块，超级块唯一确定了vinode对应的文件系统。
 
-  **i_ops**：i_ops则是一组对vinode进行操作的函数调用。需要注意的是，在VFS中仅仅提供了vinode的操作函数接口，这些函数的具体实现会由下层的文件系统提供。6.1.4.3节会对其进行详细介绍。
+  **i_ops**：i_ops字段是struct vinode_ops类型，它是一组对vinode进行操作的函数调用。需要注意的是，在VFS中仅仅提供了vinode的操作函数接口，这些函数的具体实现会由下层的文件系统提供。
 
-  例如，对于RFS而言，vinode中的其他信息（inum、size、type、nlinks、blocks以及addrs）都是在VFS首次访问到某个磁盘文件或目录时，从其保存在RAM DISK中的disk inode上直接复制得到的。而对于hostfs，vinode中的这些数据并不会被使用，而只是会设置i_fs_info字段。
+  对于RFS而言，vinode中的其他信息（inum、size、type、nlinks、blocks以及addrs）都是在VFS首次访问到某个磁盘文件或目录时，基于对应的disk inode内容产生的。而对于hostfs，vinode中的这些数据并不会被使用，而只是会设置i_fs_info字段。
 
 * *dentry*
 
-  如果说vinode是文件访问和操作的核心对象，那么dentry可以称为在VFS中对文件进行组织和索引的核心对象。dentry即directory entry，是VFS中对目录项的抽象，该对象在VFS承载了多种功能，包括对vinode进行组织、提供目录项缓存以及快速索引支持。dentry同样定义在vfs.h文件中：
+  dentry即directory entry，是VFS中对目录项的抽象，该对象在VFS承载了多种功能，包括对vinode进行组织、提供目录项缓存以及快速索引支持，它的定义在vfs.h文件中：
 
   ```c
   38 struct dentry {
@@ -380,15 +374,11 @@ VFS对具体的文件系统进行了抽象，构建出一个通用的文件系�
 
   与vinode类似，dentry同样是仅存在于内存中一种抽象数据类型，且一个dentry对应一个vinode（由dentry_inode成员记录）。由于硬链接的存在，一个vinode可能同时被多个dentry引用。另外需要注意的是，在VFS中，无论是普通文件还是目录文件，都会存在相应的dentry。
 
-  为了支撑dentry的功能，内存中的每一个dentry都存在于**目录树**与**路径哈希表**两种结构之中。
-
-  首先，所有的dentry会按文件的树形目录结构组织成一颗目录树，每个dentry中的parent数据项会指向其父dentry。该目录树结构将内存中存在的dentry及对应的vinode进行了组织，便于文件的访问。
-
-  其次，所有的dentry都存在于一个以父目录项地址和目录项名为索引的哈希链表（dentry_hash_table）中。将dentry存放于哈希链表中可以加快对目录的查询操作。关于VFS具体是如何利用dentry在内存中构建目录树，可以参考下文6.1.4.4节的内容。
+  为了支撑dentry的功能，内存中的每一个dentry都存在于目录树与路径哈希表两种结构之中。首先，所有的dentry会按文件的树形目录结构组织成一颗目录树，每个dentry中的parent数据项会指向其父dentry。该目录树结构将内存中存在的dentry及对应的vinode进行了组织，便于文件的访问。其次，所有的dentry都存在于一个以父目录项地址和目录项名为索引的哈希链表（dentry_hash_table）中，将dentry存放于哈希链表中可以加快对目录的查询操作。
 
 * *super_block*
 
-  super_block对象用来保存一个已挂载文件系统的相关信息。在一个文件系统被挂载到系统中时，其对应的super_block会被创建，并读取磁盘上的super block信息（若存在）来对super_block对象进行初始化。对于RFS文件系统而言，在访问其中的文件时，需要从super_block中获取文件系统所在的设备信息，且RFS中数据盘块的分配和释放需要借助保存在s_fs_info成员中的bitmap来完成。而对于hostfs而言，由于它并不保存super block，所以其VFS层的super_block结构主要用来维护hostfs根目录信息。super_block结构定义在vfs.h文件中：
+  super_block结构用来保存一个已挂载文件系统的相关信息。在一个文件系统被挂载到系统中时，其对应的super_block会被创建，并读取磁盘上的super block信息（若存在）来对super_block对象进行初始化。对于RFS文件系统而言，在访问其中的文件时，需要从super_block中获取文件系统所在的设备信息，且RFS中数据盘块的分配和释放需要借助保存在s_fs_info成员中的bitmap来完成。而对于hostfs而言，它并不存在物理上的super block，其VFS层的super_block结构主要用来维护hostfs根目录信息。super_block结构定义在vfs.h文件中：
 
   ```c
   104 struct super_block {
@@ -462,7 +452,7 @@ viop函数是VFS与具体文件系统进行交互的重要部分，也是VFS能�
 169 };
 ```
 
-上述函数接口实际上是一系列的函数指针，在VFS中的vinode_ops结构体中限定了这些函数的参数类型和返回值，并没有给出函数的实际定义。而在具体文件系统中，需要根据vinode_ops中提供的函数接口，来定义具体的函数实现，并将函数地址赋值给vinode_ops结构中相应的函数指针。在VFS中则通过vinode_ops的函数指针调用实际的文件系统操作函数。以RFS为例，我们可以在kernel/rfs.c中找到如下一个vinode_ops类型变量（rfs_i_ops）的定义（以下完整代码来自lab4_3_hardlink分支）：
+上述函数接口实际上是一系列的函数指针，在VFS中的vinode_ops结构体中限定了这些函数的参数类型和返回值，但并没有给出函数的实际定义。而在具体文件系统中，需要根据vinode_ops中提供的函数接口，来定义具体的函数实现，并将函数地址赋值给vinode_ops结构中相应的函数指针。在VFS中则通过vinode_ops的函数指针调用实际的文件系统操作函数。以RFS为例，我们可以在kernel/rfs.c中找到如下一个vinode_ops类型变量（rfs_i_ops）的定义（以下完整代码来自lab4_3_hardlink分支）：
 
 ```c
 22 const struct vinode_ops rfs_i_ops = {
@@ -571,9 +561,7 @@ viop函数是VFS与具体文件系统进行交互的重要部分，也是VFS能�
 
 vfs_open函数即为前文中提到的VFS层对上层应用提供的接口之一，该函数完成根据文件路径和访问标志位打开一个文件的功能。vfs_open在第135行和179行分别调用了两个viop接口函数：viop_create（“viop_create(node, name)”形式是为了调用方便而定义的宏，其展开为：“node->i_ops->viop_create(node, name)”，其他viop接口函数也有类似的宏定义，见kernel/vfs.h）和viop_hook_open。通过阅读该函数实现我们可以发现，vfs_open函数在发现打开的文件不存在，且调用时具有creatable标志位时，会调用viop_create对该文件进行创建。而该viop_create则由具体文件系统提供实现（比如RFS中的rfs_create）。在这个过程中我们注意到，vfs_open函数要想完成打开文件的操作，其必须依赖底层文件系统提供一个能够完成“创建新文件并返回其vinode”功能的viop_create函数。换句话说，除了钩子函数以外的其他viop函数（如viop_create），在其具体实现中需要完成什么样的功能是在VFS层规定好的，底层文件系统提供的这些viop函数实现必须完成VFS层所预期的功能（如在磁盘中创建一个文件、读写文件或创建硬链接等）。
 
-接下来我们再来看vfs_open的177--182行，对钩子函数（即viop_hook_open）的调用。代码实现的功能是：若viop_hook_open函数指针不为NULL，则调用它（通过条件判断）。可以看到，从VFS层的角度来说，即使viop_hook_open不完成任何实际功能，甚至没有定义（则不会被调用），也不会影响vfs_open函数完成打开文件的功能。换句话来讲，VFS层对这些钩子函数没有任何的“期待”，仅仅只是在正确的位置（打开文件、关闭文件、打开目录和关闭目录）调用它们而已。
-
-既然从VFS层的角度来看这类钩子函数不需要完成任何功能，为什么还要有钩子函数的存在呢？实际上，在VFS运行过程中的一些关键时刻，钩子函数为具体文件系统提供一个执行自定义代码的“机会”。比如，上文中提到过，hostfs中的spike_file_t结构体包含主机端打开文件描述符，hostfs需要将其地址保存在文件对应vinode的i_fs_info中，而该操作显然需要在打开文件时完成，否则后续对该文件的读写操作则无法顺利进行。但是，这段与hostfs自身细节高度相关的代码显然不应该直接放入vfs_open函数中，而是应该由hostfs自己提供，vfs_open负责为其提供一个执行“机会”。
+接下来我们再来看vfs_open的177--182行，对钩子函数（即viop_hook_open）的调用。代码实现的功能是：若viop_hook_open函数指针不为NULL，则调用它（通过条件判断）。可以看到，从VFS层的角度来说，即使viop_hook_open不完成任何实际功能，甚至没有定义（则不会被调用），也不会影响vfs_open函数完成打开文件的功能。换句话来讲，VFS层对这些钩子函数没有任何的“期待”，仅仅只是在正确的位置（打开文件、关闭文件、打开目录和关闭目录）调用它们而已。既然从VFS层的角度来看这类钩子函数不需要完成任何功能，为什么还要有钩子函数的存在呢？实际上，在VFS运行过程中的一些关键时刻，钩子函数为具体文件系统提供一个执行自定义代码的“机会”。比如，上文中提到过，hostfs中的spike_file_t结构体包含主机端打开文件描述符，hostfs需要将其地址保存在文件对应vinode的i_fs_info中，而该操作显然需要在打开文件时完成，否则后续对该文件的读写操作则无法顺利进行。但是，这段与hostfs自身细节高度相关的代码显然不应该直接放入vfs_open函数中，而是应该由hostfs自己提供，vfs_open负责为其提供一个执行“机会”。
 
 为了验证这一点，我们可以查看kernel/hostfs.c中hostfs_i_ops的定义（以下完整代码来自lab4_3_hardlink分支）：
 
@@ -617,9 +605,7 @@ vfs_open函数即为前文中提到的VFS层对上层应用提供的接口之一
 249 }
 ```
 
-由此可见，hostfs_hook_open函数确实完成了打开一个主机端文件，并将其spike_file_t结构地址保存在i_fs_info的功能。
-
-VFS层一共定义了四个钩子函数，分别是：viop_hook_open、viop_hook_close、viop_hook_opendir和viop_hook_closedir，它们分别在打开文件（vfs_open）、关闭文件（vfs_close）、打开目录（vfs_opendir）和关闭目录（vfs_closedir）时被调用。
+由此可见，hostfs_hook_open函数确实完成了打开一个主机端文件，并将其spike_file_t结构地址保存在i_fs_info的功能。VFS层一共定义了四个钩子函数，分别是：viop_hook_open、viop_hook_close、viop_hook_opendir和viop_hook_closedir，它们分别在打开文件（vfs_open）、关闭文件（vfs_close）、打开目录（vfs_opendir）和关闭目录（vfs_closedir）时被调用。
 
 hostfs实现了前两种钩子函数，函数名称以及完成的功能如下：
 
@@ -697,7 +683,7 @@ RFS实现了后两种钩子函数，函数名称以及完成的功能如下（�
 103 }
 ```
 
-为了简化文件系统挂载过程，PKE的文件系统并不支持将一个设备中的文件系统挂载到任意目录下，而是提供了两种固定的挂载方式：”挂载为根目录“或”挂载为根目录下的子目录“。vfs_mount的第78--83行对应将一个设备挂载为根目录的情况。第79行将VFS目录树的根目录指向该设备上文件系统的根目录；第82行则将根目录的dentry加入哈希链表中，加快后续的目录搜索过程。第83--98行对应将一个设备挂载为根目录下的子目录的情况。第91行将设备上文件系统的根目录对应的dentry名称修改为设备名；第94行将其链接到VFS根目录下，作为VFS根目录下的一个子目录。注意，该步骤相当于在VFS的根目录下创建了一个虚拟目录，虚拟目录的名称为被挂载设备的设备名。例如，若将设备“DEVICE0”以`MOUNT_DEFAULT`方式挂载，则会在VFS根目录下创建一个虚拟的子目录（仅存在于内存中，不会在磁盘中创建目录文件）：`/DEVICE0`作为所挂载设备的挂载点。在挂载完成后，`/DEVICE0`在逻辑上等价于所挂载文件系统的根目录。最后，第97行同样将这个新加入VFS目录树的dentry插入到哈希链表中，加快后续的目录搜索。实际上，任何新加入VFS目录树的dentry都会被同步插入哈希链表中。
+为了简化文件系统挂载过程，PKE的文件系统并不支持将一个设备中的文件系统挂载到任意目录下，而是提供了两种固定的挂载方式：“挂载为根目录”或“挂载为根目录下的子目录”。vfs_mount的第78--83行对应将一个设备挂载为根目录的情况。第79行将VFS目录树的根目录指向该设备上文件系统的根目录；第82行则将根目录的dentry加入哈希链表中，加快后续的目录搜索过程。第83--98行对应将一个设备挂载为根目录下的子目录的情况。第91行将设备上文件系统的根目录对应的dentry名称修改为设备名；第94行将其链接到VFS根目录下，作为VFS根目录下的一个子目录。注意，该步骤相当于在VFS的根目录下创建了一个虚拟目录，虚拟目录的名称为被挂载设备的设备名。例如，若将设备“DEVICE0”以MOUNT_DEFAULT方式挂载，则会在VFS根目录下创建一个虚拟的子目录（仅存在于内存中，不会在磁盘中创建目录文件）：/DEVICE0作为所挂载设备的挂载点。在挂载完成后，/DEVICE0在逻辑上等价于所挂载文件系统的根目录。最后，第97行同样将这个新加入VFS目录树的dentry插入到哈希链表中，加快后续的目录搜索。实际上，任何新加入VFS目录树的dentry都会被同步插入哈希链表中。
 
 在上述VFS层文件系统挂载过程中，我们应当注意到另一个事实：当一个新文件系统被挂载时，并不会立刻读取其磁盘上保存的完整目录结构到VFS目录树中，而只是将具体文件系统的根目录添加到VFS目录树中。显然，这样做既能节约时间和内存消耗，也更加贴近于真实的文件系统运行情况。但是，VFS如何处理后续对该新挂载文件系统下子目录或子文件的访问呢？通过阅读kernel/vfs.c中定义的lookup_final_dentry函数可以找到答案：
 
@@ -794,9 +780,7 @@ RFS实现了后两种钩子函数，函数名称以及完成的功能如下（�
 
 #### 6.1.4.5 VFS层的哈希缓存
 
-VFS通过哈希链表的形式实现了对dentry与vinode两种结构的缓存（cache）和快速索引，它们都采用util/hash_table.h中定义的通用哈希链表类型（hash_table）实现，并提供各自的key类型、哈希函数以及key的等值判断函数。
-
-在kernel/vfs.c中能找到这两个哈希链表的定义：
+VFS通过哈希链表的形式实现了对dentry与vinode两种结构的缓存（cache）和快速索引，它们都采用util/hash_table.h中定义的通用哈希链表类型（hash_table）实现，并提供各自的key类型、哈希函数以及key的等值判断函数。在kernel/vfs.c中能找到这两个哈希链表的定义：
 
 ```c
 16 struct hash_table dentry_hash_table;
@@ -867,9 +851,7 @@ VFS通过哈希链表的形式实现了对dentry与vinode两种结构的缓存�
 194 };
 ```
 
-vinode的key值由disk inode号与文件系统对应的超级块构成。disk inode号在一个文件系统中具有唯一性，因此一个disk inode号加上一个文件系统超级块便能够唯一确定一个vinode。vinode的等值判断函数与哈希函数同样定义在kernel/vfs.c中，这里不再罗列，请读者自行阅读。
-
-另外，由于hostfs对应的vinode不存在disk inode号，所以其不会被加入到上述vinode哈希链表中（hostfs不存在硬链接，也不需要回写vinode数据，因此无需担心上述异常情况）。
+vinode的key值由disk inode号与文件系统对应的超级块构成。disk inode号在一个文件系统中具有唯一性，因此一个disk inode号加上一个文件系统超级块便能够唯一确定一个vinode。vinode的等值判断函数与哈希函数同样定义在kernel/vfs.c中，这里不再罗列，请读者自行阅读。另外，由于hostfs对应的vinode不存在disk inode号，所以其不会被加入到上述vinode哈希链表中（hostfs不存在硬链接，也不需要回写vinode数据，因此无需担心上述异常情况）。
 
 <a name="rfs"></a> 
 
@@ -1127,6 +1109,17 @@ RFS给每个文件都分配了一个硬链接数nlinks，在rfs_dinode的定义�
 - （先提交lab3_3的答案，然后）切换到lab4_1，继承lab3_3中所做的修改，并make后的直接运行结果：
 
 ```
+//切换到lab4_1
+$ git checkout lab4_1_file
+
+//继承lab4_1以及之前的答案
+$ git merge lab3_3_rrsched -m "continue to work on lab4_1"
+
+//重新构造
+$ make clean; make
+
+//运行构造结果
+$ spike ./obj/riscv-pke ./obj/app_file
 In m_start, hartid:0
 HTIF is available!
 (Emulated) memory size: 2048 MB
@@ -1179,6 +1172,7 @@ System is shutting down with exit code -1.
 实验完成后的运行结果：
 
 ```
+$ spike ./obj/riscv-pke ./obj/app_file
 In m_start, hartid:0
 HTIF is available!
 (Emulated) memory size: 2048 MB
@@ -1437,6 +1431,17 @@ $ git commit -a -m "my work on lab4_1 is done."
 
 
 ```
+//切换到lab4_2
+$ git checkout lab4_2_directory
+
+//继承lab4_2以及之前的答案
+$ git merge lab4_1_file -m "continue to work on lab4_2"
+
+//重新构造
+$ make clean; make
+
+//运行构造结果
+$ spike ./obj/riscv-pke ./obj/app_directory
 In m_start, hartid:0
 HTIF is available!
 (Emulated) memory size: 2048 MB
@@ -1488,6 +1493,7 @@ System is shutting down with exit code -1.
 实验完成后的运行结果：
 
 ```
+$ spike ./obj/riscv-pke ./obj/app_directory
 In m_start, hartid:0
 HTIF is available!
 (Emulated) memory size: 2048 MB
@@ -1821,6 +1827,17 @@ $ git commit -a -m "my work on lab4_2 is done."
 
 
 ```c
+//切换到lab4_3
+$ git checkout lab4_3_hardlink
+
+//继承lab4_2以及之前的答案
+$ git merge lab4_2_directory -m "continue to work on lab4_3"
+
+//重新构造
+$ make clean; make
+
+//运行构造结果
+$ spike ./obj/riscv-pke ./obj/app_hardlink
 In m_start, hartid:0
 HTIF is available!
 (Emulated) memory size: 2048 MB
@@ -1865,6 +1882,7 @@ System is shutting down with exit code -1.
 实验完成后的运行结果：
 
 ```
+$ spike ./obj/riscv-pke ./obj/app_hardlink
 In m_start, hartid:0
 HTIF is available!
 (Emulated) memory size: 2048 MB
