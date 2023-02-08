@@ -1719,7 +1719,7 @@ $ git commit -a -m "my work on lab4_2 is done."
 
 #### **给定应用**
 
-- user/app_hardlinks.c
+- user/app_hardlink.c
 
 
 ```c
@@ -2058,62 +2058,73 @@ $ git commit -a -m "my work on lab4_3 is done."
 - user/app_relativepath.c
 
   ```c
-  01 #include "user_lib.h"
-  02 #include "util/string.h"
-  03 #include "util/types.h"
-  04 
-  05 int main(int argc, char *argv[]) {
-  06   int fd;
-  07   int MAXBUF = 512;
-  08   char buf[MAXBUF];
-  09   char str[] = "hello world";
-  10   int fd1, fd2;
-  11 
-  12   printu("\n======== Test 1: change current directory  ========\n");
-  13 
-  14   pwd();
-  15   cd("./RAMDISK0");
-  16   printu("change current directory to ./RAMDISK0\n");
-  17   pwd();
-  18 
-  19   printu("\n======== Test 2: write/read file by relative path  ========\n");
-  20   printu("write: ./ramfile\n");
-  21 
-  22   fd = open("./ramfile", O_RDWR | O_CREAT);
-  23   printu("file descriptor fd: %d\n", fd);
-  24 
-  25   write_u(fd, str, strlen(str));
-  26   printu("write content: \n%s\n", str);
-  27   close(fd);
-  28 
-  29   fd = open("./ramfile", O_RDWR);
-  30   printu("read: ./ramfile\n");
-  31 
-  32   read_u(fd, buf, MAXBUF);
-  33   printu("read content: \n%s\n", buf);
-  34   close(fd);
-  35 
-  36   printu("\n======== Test 3: Go to parent directory  ========\n");
-  37 
-  38   pwd();
-  39   cd("..");
-  40   printu("change current directory to ..\n");
-  41   pwd();
-  42   
-  43   printu("read: ./hostfile.txt\n");
-  44 
-  45   fd = open("./hostfile.txt", O_RDONLY);
-  46   printu("file descriptor fd: %d\n", fd);
-  47 
-  48   read_u(fd, buf, MAXBUF);
-  49   printu("read content: \n%s\n", buf);
-  50 
-  51   close(fd);
-  52 
-  53   printu("\nAll tests passed!\n\n");
-  54   exit(0);
-  55   return 0;
-  56 }
+    1 #include "user_lib.h"
+    2 #include "util/string.h"
+    3 #include "util/types.h"
+    4
+    5 void pwd() {
+    6   char path[30];
+    7   read_cwd(path);
+    8   printu("cwd:%s\n", path);
+    9 }
+   10
+   11 void cd(const char *path) {
+   12   if (change_cwd(path) != 0)
+   13     printu("cd failed\n");
+   14 }
+   15
+   16 int main(int argc, char *argv[]) {
+   17   int fd;
+   18   int MAXBUF = 512;
+   19   char buf[MAXBUF];
+   20   char str[] = "hello world";
+   21   int fd1, fd2;
+   22
+   23   printu("\n======== Test 1: change current directory  ========\n");
+   24
+   25   pwd();
+   26   cd("./RAMDISK0");
+   27   printu("change current directory to ./RAMDISK0\n");
+   28   pwd();
+   29
+   30   printu("\n======== Test 2: write/read file by relative path  ========\n");
+   31   printu("write: ./ramfile\n");
+   32
+   33   fd = open("./ramfile", O_RDWR | O_CREAT);
+   34   printu("file descriptor fd: %d\n", fd);
+   35
+   36   write_u(fd, str, strlen(str));
+   37   printu("write content: \n%s\n", str);
+   38   close(fd);
+   39
+   40   fd = open("./ramfile", O_RDWR);
+   41   printu("read: ./ramfile\n");
+   42
+   43   read_u(fd, buf, MAXBUF);
+   44   printu("read content: \n%s\n", buf);
+   45   close(fd);
+   46
+   47   printu("\n======== Test 3: Go to parent directory  ========\n");
+   48
+   49   pwd();
+   50   cd("..");
+   51   printu("change current directory to ..\n");
+   52   pwd();
+   53
+   54   printu("read: ./hostfile.txt\n");
+   55
+   56   fd = open("./hostfile.txt", O_RDONLY);
+   57   printu("file descriptor fd: %d\n", fd);
+   58
+   59   read_u(fd, buf, MAXBUF);
+   60   printu("read content: \n%s\n", buf);
+   61
+   62   close(fd);
+   63
+   64   printu("\nAll tests passed!\n\n");
+   65   exit(0);
+   66   return 0;
+   67 }
   ```
   
   相对路径即形如：“`./file`”、“`./dir/file`”以及“`../dir/file`”的路径形式。与绝对路径总是从根目录开始逐级指定文件或目录在目录树中的位置不同，相对路径从进程的“当前工作目录“开始，对一个文件或目录在目录树中的位置进行描述。
