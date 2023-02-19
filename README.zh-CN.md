@@ -46,7 +46,7 @@
  - [5.5 lab3_challenge1 进程等待和数据段复制（难度：&#9733;&#9733;&#9734;&#9734;&#9734;）](chapter5_process.md#lab3_challenge1_wait) 
  - [5.6 lab3_challenge2 实现信号量（难度：&#9733;&#9733;&#9733;&#9734;&#9734;）](chapter5_process.md#lab3_challenge2_semaphore) 
 
-[第六章. PKE实验4：文件系统](chapter6_filesystem.md) ----- 课程资源：    [PPT](./resources/第六章. 实验4：文件系统.pptx)        [视频讲解](https://www.bilibili.com/video/BV1Us4y1h7tT)
+[第六章. PKE实验4：文件系统](chapter6_filesystem.md) ----- 课程资源：    [PPT](./resources/第六章.实验4：文件系统.pptx)        [视频讲解](https://www.bilibili.com/video/BV1Us4y1h7tT)
 
  - [6.1 实验4的基础知识](chapter6_filesystem.md#fundamental)  
  - [6.2 lab4_1 文件操作](chapter6_filesystem.md#lab4_1_file)  
