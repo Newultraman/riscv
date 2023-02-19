@@ -46,7 +46,7 @@
  - [5.5 lab3_challenge1 进程等待和数据段复制（难度：&#9733;&#9733;&#9734;&#9734;&#9734;）](chapter5_process.md#lab3_challenge1_wait) 
  - [5.6 lab3_challenge2 实现信号量（难度：&#9733;&#9733;&#9733;&#9734;&#9734;）](chapter5_process.md#lab3_challenge2_semaphore) 
 
-[第六章. PKE实验4：文件系统](chapter6_filesystem.md) 
+[第六章. PKE实验4：文件系统](chapter6_filesystem.md) ----- 课程资源：    [PPT](./resources/第六章. 实验4：文件系统.pptx)        [视频讲解](https://www.bilibili.com/video/BV1Us4y1h7tT)
 
  - [6.1 实验4的基础知识](chapter6_filesystem.md#fundamental)  
  - [6.2 lab4_1 文件操作](chapter6_filesystem.md#lab4_1_file)  
@@ -57,14 +57,14 @@
 
 ## 第二部分：系统能力培养实验
 
-[第七章. RISCV处理器在PYNQ上的部署和接口实验](chapter7_riscv_on_pynq.md)  ----- 课程资源：    [PPT](./resources/第六章.fpga实验.pptx)        [视频讲解](https://www.bilibili.com/video/BV1nt4y1n7dm)
+[第七章. RISCV处理器在PYNQ上的部署和接口实验](chapter7_riscv_on_pynq.md)  ----- 课程资源：    [PPT](./resources/第七章.fpga实验.pptx)        [视频讲解](https://www.bilibili.com/video/BV1nt4y1n7dm)
 
 - [7.1 系统能力培养部分实验环境安装](chapter7_riscv_on_pynq.md#environments)  
 - [7.2 fpga实验1：在Rocket Chip上添加uart接口](chapter7_riscv_on_pynq.md#hardware_lab1)
 - [7.3 fpga实验2：以中断方式实现uart通信](chapter7_riscv_on_pynq.md#hardware_lab2)
 - [7.4 fpga实验3：配置连接到PS端的USB设备](chapter7_riscv_on_pynq.md#hardware_lab3)
 
-[第八章. PKE实验5：设备和文件](chapter8_device.md)  ----- 课程资源：    [PPT](./resources/第七章.实验4：设备管理.pptx)        [视频讲解](https://www.bilibili.com/video/BV1LB4y157Rb)
+[第八章. PKE实验5：设备和文件](chapter8_device.md)  ----- 课程资源：    [PPT](./resources/第八章.实验4：设备管理.pptx)        [视频讲解](https://www.bilibili.com/video/BV1LB4y157Rb)
 
  - [8.1 实验5的基础知识](chapter8_device.md#fundamental)  
  - [8.2 lab5_1 轮询方式](chapter8_device.md#polling)  
