@@ -932,7 +932,7 @@ RISC-V是一个可扩展指令集，spike默认支持的ISA为RV64IMAFDC，我�
 
 [RISC-V开源项目列表]  RISC-V开源项目列表. https://riscv.org/risc-v-cores/
 
-[开源指令集的指南] 勾凌睿、黄成、刘志刚，《RISC-V手册——一本开源指令集的指南》. Avail at: http://crva.ict.ac.cn/documents/RISC-V-Reader-Chinese-v2p1.pdf
+[开源指令集的指南] 勾凌睿、黄成、刘志刚，《RISC-V手册——一本开源指令集的指南》. Avail at: http://crva.ict.ac.cn/wjxz/202202/P020220217666841292320.pdf
 
 [RISC-V instruction set manual] A. Waterman, Y. Lee, and et al. The RISC-V Instruction Set Manual Volume II: Privileged Architecture (version 20191213). Avail at: https://content.riscv.org/wp-content/uploads/2019/12/riscv-spec-20191213.pdf
 
