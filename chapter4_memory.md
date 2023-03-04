@@ -998,7 +998,7 @@ System is shutting down with exit code 0.
 
 ####  实验内容
 
-本实验为挑战实验，基础代码将继承和使用lab2_challenge1完成后的代码：
+本实验为挑战实验，基础代码将继承和使用lab2_3完成后的代码：
 
 - （先提交lab2_3的答案，然后）切换到lab2_challenge2、继承lab2_3中所做修改：
 
