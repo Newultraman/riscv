@@ -236,7 +236,7 @@ PKE实验中，创建一个进程需要先调用kernel/process.c文件中的allo
 156 }
 ```
 
-通过以上代码，可以发现alloc_process()函数除了找到一个空的进程结构外，还为新创建的进程建立了KERN_BASE以上逻辑地址的映射（这段代码在实验3之前位于kernel/kernel.c文件的load_user_program()函数中，在本实验中还额外添加了HEAP_SEGMENT段的映射），并将映射信息保存到了进程结构中。
+通过以上代码，可以发现alloc_process()函数除了找到一个空的进程结构外，还为新创建的进程建立了KERN_BASE以上逻辑地址的映射（这段代码在实验3之前位于kernel/kernel.c文件的load_user_program()函数中），并将映射信息保存到了进程结构中。在本实验中还额外添加了HEAP_SEGMENT段的映射（第148--150行）。同时可以看出，对于未调用sys_user_allocate_page分配堆区页面的进程，其堆段的大小为0（第149行），不会被分配页面。
 
 对于给定应用，PKE将通过调用load_bincode_from_host_elf()函数载入给定应用对应的ELF文件的各个段。之后被调用的elf_load()函数在载入段后，将对被载入的段进行判断，以记录它们的虚地址映射：
 

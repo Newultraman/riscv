@@ -433,20 +433,18 @@ SUM（permit Supervisor User Memory access）位用于控制S模式下的虚拟�
 实际系统中导致中断发生的事件往往是比较复杂的，它们的来源、处理时机和返回方式都不尽相同。为了便于读者对中断的理解以及表达的准确性，我们借鉴参考文献[SiFive Interrupt](#refenences)的中断分类标准，将系统中发生的可能中断当前执行程序的事件分为3类：
 
 ● **Exception**（异常）：这类中断是处理器在执行某条指令时，由于条件不满足而产生的。典型的异常有缺页、执行当前特权级不支持的指令等。**相对于正在执行的程序而言，exception是同步（synchronous）发生的。exception产生的时机是指令执行的过程中（即处理器流水线的执行阶段），在exception处理完毕后，系统将返回发生exception的那条指令重新执行**。
-
-● **Trap**（即我们通常理解的“系统调用”或者“软件中断”，但是我们不建议把它翻译为“陷阱”！因为“陷阱”这个词在中文语境的含义甚至和“中断”一样宽泛。RISC-V中trap等同于syscall，为了与其他类型的中断进行区分，**我们更推荐使用syscall来指代这类中断**）：这类中断是当前执行的程序主动发出的ecall指令（类似8086中的int指令）导致的。典型的trap有屏幕输出（printf）、磁盘文件读写（read/write）等，这些高级语言函数调用通过系统函数库（libc）的转换，在RISC-V平台都会转换成ecall指令。**与exception类似，相对于正在执行的程序而言，syscall也是同步（synchronous）发生的。但与exception不同的地方在于，syscall在处理完成后返回的是下一条指令。**
-
-● **Interrupt**（我们不建议对它进行任何形式的翻译！因为“中断”在中文语境中的含义过于宽泛）：这类中断一般是由外部设备产生的事件而导致的。在Intel的x86系列处理器中，interrupt也被称为IRQ（Interrupt ReQuest，实际上，**我们更推荐使用IRQ来指代外部中断**，用Interrupt往往导致指代范围太宽泛的问题）。典型的IRQ有：可编程时钟计时器（PIT）所产生的timer事件、DMA控制器发出的I/O完成事件、声卡发出的缓存空间用完事件等。**相对于正在执行的程序而言，interrupt是异步（asynchronous）发生的。另外，对于处理器流水线而言，interrupt的处理时机是指令的间隙。不同于exception但与trap类似，interrupt在处理完成后返回的是下一条指令**。
+● **Syscall**（系统调用）：这类中断是当前执行的程序主动发出的ecall指令（类似8086中的int指令）导致的，即我们通常理解的“系统调用”。实际上，RISC-V术语中称这类中断为trap，但是我们认为trap并不准确，且强烈不建议把它翻译为“陷阱”！因为“陷阱”这个词在中文语境的含义甚至和“中断”一样宽泛，**我们更推荐使用syscall（对应的中文翻译是“系统调用”）来指代这类中断**。典型的syscall有屏幕输出（printf）、磁盘文件读写（read/write）等，这些高级语言函数调用通过系统函数库（libc）的转换，在RISC-V平台都会转换成ecall指令。与exception类似，相对于正在执行的程序而言，**syscall也是同步（synchronous）发生的。但与exception不同的地方在于，syscall在处理完成后返回的是下一条指令**。
+● **IRQ**（外部中断）：这类中断一般是由外部设备产生的事件而导致的。实际上，RISC-V术语中称这类中断为interrupt，但我们认为在操作系统语境下用这个词并不合适，因为interrupt（特别是它的中文翻译“中断”）往往导致指代范围太宽泛的问题。IRQ（Interrupt ReQuest）来源于Intel的术语，我们认为，用它来指代外部中断更加准确和不容易导致混淆。典型的IRQ有：可编程时钟计时器（PIT）所产生的timer事件、DMA控制器发出的I/O完成事件、声卡发出的缓存空间用完事件等。**相对于正在执行的程序而言，IRQ是异步（asynchronous）发生的**。另外，对于处理器流水线而言，IRQ的处理时机是指令的间隙。不同于exception但与syscall类似，**IRQ在处理完成后返回的是下一条指令**。
 
 表1.6 中断的分类
 
 | 中断类型            | 产生时机           | 处理时机     | 返回地址       |
 | ------------------- | ------------------ | ------------ | -------------- |
-| Exception           | 同步（于当前程序） | 指令执行阶段 | 发生异常的指令 |
-| Trap (**syscall**)  | 同步（于当前程序） | -            | 下一条指令     |
-| Interrupt (**IRQ**) | 异步（于当前程序） | 指令执行间隙 | 下一条指令     |
+| Exception（异常）   | 同步（于当前程序） | 指令执行阶段 | 发生异常的指令 |
+| Syscall（系统调用） | 同步（于当前程序） | -            | 下一条指令     |
+| IRQ（外部中断）     | 异步（于当前程序） | 指令执行间隙 | 下一条指令     |
 
-表1.6对这3类中断进行了归纳和比较。需要注意的是，不同文献（特别是中文文献）对于某个类型的中断可能用了不同的名字，例如trap在很多文献和参考书中又被称为“陷阱”、“陷入”、“软件中断”或“系统调用”等等。
+表1.6对这3类中断进行了归纳和比较。需要注意的是，不同文献（特别是中文文献）对于某个类型的中断可能用了不同的名字，例如trap在很多文献和参考书中又被称为“陷阱”、“陷入”、“软件中断”或“系统调用”等等，具体指代往往不知所云。
 
 面对纷繁复杂的术语，我们给读者的建议是：**描述某个确定的中断时，尽量用英文单词来表达（不要翻译成中文，特别是避免使用“中断”或“陷入”这类含义太宽泛的名词）**。实际上，当需要描述某个新类型的中断时，可以试着根据这个中断的产生、处理的时机，以及返回的位置来对它进行分类和归纳，并翻译成它对应的类名。这样，听众一听就知道该中断的类型以及对应的处理方式了，避免了很多不必要、啰嗦且含糊的解释。
 
@@ -494,7 +492,7 @@ SUM（permit Supervisor User Memory access）位用于控制S模式下的虚拟�
 
 从表1.7中，我们可以看到：首先，当发生的中断类型是interrupt时，mcause的高位为1，而如果发生的中断类型是exception（或trap）时，mcause的高位为0；其次，对于interrupt而言，一个特权模式只有一些可能的取值。例如，对于M模式，interrupt的code的可能（典型）取值和含义为：
 
-● 3：Machine software interrupt。这种类型的中断是由软件产生的，但是却不是exception或者trap！实际上，这类interrupt主要是指在多核（实际上，RISC-V中的硬件处理单元称作硬件线程，Hardware Threads简称Harts，一般情况下它等同于“处理器核”的概念）环境下的处理期间中断。为了实现这类中断，RISC-V是通过让一个核直接写另一个核的本地中断控制器来实现的。需要注意的是，这里的software interrupt并不是我们通常理解的“软件中断”，更不是trap（或syscall）！
+● 3：Machine software interrupt。这种类型的中断是由软件产生的，但是却不是exception或者syscall！实际上，这类interrupt主要是指在多核（实际上，RISC-V中的硬件处理单元称作硬件线程，Hardware Threads简称Harts，一般情况下它等同于“处理器核”的概念）环境下，发生在处理器之间的中断。为了实现这类中断，RISC-V是通过让一个处理器核直接写另一个处理器核的本地中断控制器来实现的。
 
 ● 7：Machine timer interrupt。即时钟中断，它也是由处理器核所带的本地中断控制器产生的。
 
@@ -502,11 +500,11 @@ SUM（permit Supervisor User Memory access）位用于控制S模式下的虚拟�
 
 ● >=16：Implementation defined local interrupts。与实现相关的其他中断源，对于RV64G指令集而言，这个数字可以到48（RV32G是16）。数字越大，意味着可以接更多的外部中断源。
 
-最后，对于非interrupt（即表1.7的Interrupt=0）情况，Code=8时表示发生的是一个来自U模式的trap（Environment call from U-mode）；Code=9时表示发生的是一个来自S模式的trap（Environment call from S-mode）；而Code=11时表示发生的是一个来自M模式的trap（Environment call from M-mode）。需要再次强调的是，这里的trap就是我们平时所说的“系统调用”或者“syscall”，在8086环境下它们由int指令产生，而在RISC-V环境下它们由ecall指令产生。
+最后，对于非interrupt（即表1.7的Interrupt=0）情况，Code=8时表示发生的是一个来自U模式的syscall（Environment call from U-mode）；Code=9时表示发生的是一个来自S模式的syscall（Environment call from S-mode）；而Code=11时表示发生的是一个来自M模式的syscall（Environment call from M-mode）。需要再次强调的是，这里的syscall就是我们平时所说的“系统调用”，在8086环境下它们由int指令产生，而在RISC-V环境下它们由ecall指令产生。
 
-除了这几个取值外，表1.7中其他的Interrupt=0的情况就都是exception。例如，当Code=13（Load page fault）就是常见的所谓“缺页中断（实际上应该叫它缺页exception）”了；Code=15（Store/AMO page fault）就是访存（Store）或原子操作（AMO）异常，这些异常在我们的PKE实验中都能接触到。
+除了这几个取值外，表1.7中其他的Interrupt=0的情况就都是exception。例如，当Code=13（Load page fault）就是常见的所谓“缺页中断（实际上应该叫它缺页exception）”了；Code=15（Store/AMO page fault）就是访存（Store）或原子操作（AMO）异常，这些异常在我们的PKE实验中都能接触到，碰到这类异常往往意味着代码里存在写空指针错误。
 
-仍然以机器模式为例，在RISC-V处理器中，中断向量表的组织和实现有两种方式，一种是直接模式（Direct Mode），另一种是向量模式（Vectored Mode）。前一种模式将CSR中的mtvec指向所有中断（包括表1.7中所有的interruption、trap和exception）的总入口函数，然后由该函数根据mcause中具体的值调用对应的中断例程。向量模式则严格按照表1.7所示的顺序，将所有中断例程的入口地址组织成一个向量（类似8086中的中断向量表），并将mtvec指向该表的首地址。当发生中断时，根据mcause中的值计算向量中的偏移并调用对应例程。RISC-V是根据mtvec的最低位（mtvec.mode）来判断系统具体采用了哪种模式：如果采用了直接模式，其最低位为0；如果采用了向量模式，则其最低位为1。需要指出的是，我们的PKE在中断向量上使用的是直接模式。
+仍然以机器模式为例，在RISC-V处理器中，中断向量表的组织和实现有两种方式，一种是直接模式（Direct Mode），另一种是向量模式（Vectored Mode）。前一种模式将CSR中的mtvec指向所有中断（包括表1.7中所有的interruption、trap和exception）的总入口函数，然后由该函数根据mcause中具体的值调用对应的中断例程。向量模式则严格按照表1.7所示的顺序，将所有中断例程的入口地址组织成一个向量（类似8086中的中断向量表），并将mtvec指向该表的首地址。当发生中断时，根据mcause中的值计算向量中的偏移并调用对应例程。RISC-V是根据mtvec的最低位（mtvec.mode）来判断系统具体采用了哪种模式：如果采用了直接模式，其最低位为0；如果采用了向量模式，则其最低位为1。在PKE实验中，我们在中断向量上使用的是直接模式（Direct Mode）。
 
  
 
@@ -514,13 +512,13 @@ SUM（permit Supervisor User Memory access）位用于控制S模式下的虚拟�
 
 当发生一个中断，假设其目标模式（即执行中断例程的模式）为机器模式，RISC-V处理器硬件将执行以下动作：
 
-1）保存（进入中断处理历程之前的）pc（如果是trap或者interrupt，则保存下一条指令的pc）到mepc寄存器；
+1）保存（进入中断处理例程之前的）pc（如果是syscall或者IRQ，则保存下一条指令的pc）到mepc寄存器；
 
-2）将（进入中断处理历程之前的）特权级保存到mstatus寄存器的MPP字段；
+2）将（进入中断处理例程之前的）特权级保存到mstatus寄存器的MPP字段；
 
 3）将mstatus寄存器中的MIE字段保存到（它自己的）MPIE字段；
 
-4）设置mcause，其值与表1.6中的Interrupt和Exception code对应；
+4）设置mcause，其值与表1.7中的Interrupt和Code值对应；
 
 5）将pc设置为中断例程的入口，如果为直接模式则设置为mtvec的值；
 
@@ -566,7 +564,7 @@ mret
 
 **1.4.4 RISC-V的中断代理机制**
 
-RISC-V在中断处理上有一个很有意思的设计，就是可以将系统中的特定中断或者异常，通过设置较高特权级的CSR寄存器，“代理给”某个更低的特权级处理。例如，我们可以设置机器模式的mideleg以及medeleg中的某些位，将系统中的部分中断（对应mideleg）或异常（对应medeleg）“代理”给较低特权级的监管模式来处理；同理，我们也可以设置监管模式的sideleg以及sedeleg中的某些位，将系统中的部分中断或异常“代理”给用户特权级的代码来处理。
+RISC-V在中断处理上有一个很有意思的设计，就是可以将系统中的特定中断或者异常，通过设置较高特权级的CSR寄存器，“代理”给某个更低的特权级处理。例如，我们可以设置机器模式的mideleg以及medeleg中的某些位，将系统中的部分中断（对应mideleg）或异常（对应medeleg）“代理”给较低特权级的监管模式来处理；同理，我们也可以设置监管模式的sideleg以及sedeleg中的某些位，将系统中的部分中断或异常“代理”给用户特权级的代码来处理。
 
 例如，我们的PKE代码中，有以下的等效代码：
 
@@ -575,7 +573,7 @@ csrw mideleg, 1<<1 | 1<<5 | 1<<9
 csrw medeleg, 1<<0 | 1<< 3 | 1<<8 | 1<<12 | 1<<13 | 1<<15 
 ```
 
-这段代码的作用是将M模式中interrupt中的1、5和9号，分别对应Supervisor software interrupt，Supervisor timer interrupt和Supervisor external interrupt代理出去，到S模式处理；再将M模式中的exception（或trap）中的0、3、8、12、13和15号，分别对应Instruction address misaligned，调试中断Breakpoint（3号），用户态系统调用Environment call from U-mode（8号），缺页或访存异常（12、13和15号）代理出去，到S模式处理。实际上，将这些重要的中断代理出去后，系统中产生的绝大部分中断事件将都在S模式处理。所以，在其后的PKE实验中，读者主要跟U模式以及S模式的代码打交道，除启动过程和一些简单的设置（如访存、中断代理等），实验也基本不涉及M模式的代码。
+这段代码的作用是将M模式中interrupt中的1、5和9号，分别对应Supervisor software interrupt，Supervisor timer interrupt和Supervisor external interrupt代理出去，到S模式处理；再将M模式中的exception（或syscall）中的0、3、8、12、13和15号，分别对应Instruction address misaligned，调试中断Breakpoint（3号），用户态系统调用Environment call from U-mode（8号），缺页或访存异常（12、13和15号）代理出去，到S模式处理。实际上，将这些重要的中断代理出去后，系统中产生的绝大部分中断事件将都在S模式处理。所以，在其后的PKE实验中，读者主要跟U模式以及S模式的代码打交道，除启动过程和一些简单的设置（如访存、中断代理等），实验也基本不涉及M模式的代码。
 
 <a name="paging"></a>
 ### 1.5 页式虚存管理
