@@ -1,4 +1,4 @@
-#                              第六章.实验四:文件系统
+#                              第六章．实验4：文件系统
 
 ### 目录
 
@@ -179,48 +179,51 @@ PKE文件系统架构如下图所示，图中的RAM DISK在文件系统中的地
 在lab4中，PKE为进程定义了一个“打开文件表”，并用一个管理数据结构proc_file_management对一个进程所打开的文件进行管理。见kernel/proc_file.h中的定义：
 
 ```C
- 21 // data structure that manages all openned files in a PCB
- 22 typedef struct proc_file_management_t {
- 23   struct dentry *cwd;  // vfs dentry of current working directory
- 24   struct file opened_files[MAX_FILES];  // opened files array
- 25   int nfiles;  // the number of opened files a process has
- 26 } proc_file_management;
+21 // data structure that manages all openned files in a PCB
+22 typedef struct proc_file_management_t {
+23   struct dentry *cwd;  // vfs dentry of current working directory
+24   struct file opened_files[MAX_FILES];  // opened files array
+25   int nfiles;  // the number of files opened by a process
+26 } proc_file_management;
 ```
 
 我们看到，proc_file_management结构保存了一个当前目录的dentry，以及一个“打开文件”数组。该结构是每个PKE进程都有的，这一点可以参考kernel/process.h中对process结构的修改：
 
 ```c
- 51 typedef struct process_t {
- 52   // pointing to the stack used in trap handling.
- 53   uint64 kstack;
- 54   // user page table
- 55   pagetable_t pagetable;
- 56   // trapframe storing the context of a (User mode) process.
- 57   trapframe* trapframe;
- 58
- 59   // points to a page that contains mapped_regions. below are added @lab3_1
- 60   mapped_region *mapped_info;
- 61   // next free mapped region in mapped_info
- 62   int total_mapped_region;
- 63
- 64   // process id
- 65   uint64 pid;
- 66   // process status
- 67   int status;
- 68   // parent process
- 69   struct process_t *parent;
- 70   // next queue element
- 71   struct process_t *queue_next;
- 72
- 73   // accounting. added @lab3_3
- 74   int tick_count;
- 75
- 76   // file system. added @lab4_1
- 77   proc_file_management *pfiles;
- 78 }process;
+66 typedef struct process_t {
+67   // pointing to the stack used in trap handling.
+68   uint64 kstack;
+69   // user page table
+70   pagetable_t pagetable;
+71   // trapframe storing the context of a (User mode) process.
+72   trapframe* trapframe;
+73 
+74   // points to a page that contains mapped_regions. below are added @lab3_1
+75   mapped_region *mapped_info;
+76   // next free mapped region in mapped_info
+77   int total_mapped_region;
+78 
+79   // heap management
+80   process_heap_manager user_heap;
+81 
+82   // process id
+83   uint64 pid;
+84   // process status
+85   int status;
+86   // parent process
+87   struct process_t *parent;
+88   // next queue element
+89   struct process_t *queue_next;
+90 
+91   // accounting. added @lab3_3
+92   int tick_count;
+93 
+94   // file system. added @lab4_1
+95   proc_file_management *pfiles;
+96 }process;
 ```
 
-我们看到在进程定义的77行，增加了一个proc_file_management指针类型的成员pfile。这样，每当创建一个进程时，都会调用kernel/proc_file.c中定义的函数init_proc_file_management()，来对该进程（将来）要打开的文件进行管理。该函数的定义如下：
+我们看到在进程定义的95行，增加了一个proc_file_management指针类型的成员pfile。这样，每当创建一个进程时，都会调用kernel/proc_file.c中定义的函数init_proc_file_management()，来对该进程（将来）要打开的文件进行管理。该函数的定义如下：
 
 ```c
 41 proc_file_management *init_proc_file_management(void) {
@@ -228,42 +231,42 @@ PKE文件系统架构如下图所示，图中的RAM DISK在文件系统中的地
 43   pfiles->cwd = vfs_root_dentry; // by default, cwd is the root
 44   pfiles->nfiles = 0;
 45 
-46   for (int fd = 0; fd < MAX_FILES; ++fd) {
+46   for (int fd = 0; fd < MAX_FILES; ++fd)
 47     pfiles->opened_files[fd].status = FD_NONE;
-48     ++pfiles->nfiles;
-49   }
-50   sprint("FS: created a file management struct for a process.\n");
-51   return pfiles;
-52 }
+48 
+49   sprint("FS: created a file management struct for a process.\n");
+50   return pfiles;
+51 }
 ```
 
-该函数的作用是为将要管理的“打开文件”分配一个物理页面的空间，初始当前目录（cwd）置为根目录，初始化打开文件计数（42--44行）；然后初始化所有“已打开”的文件的文件描述符fd（46--49行）。kernel/proc_file.c文件中还定义了一组接口，用于进程对文件的一系列操作。这些接口包括文件打开（do_open）、文件关闭（do_close）、文件读取（do_read）、文件写（do_write）、文件读写定位（do_lseek）、获取文件状态（do_stat），甚至获取磁盘状态（do_disk_stat）。这些接口，都是在应用程序发出对应的文件操作（如open、close、read_u等）时，通过user lib，到达do_syscall，并最后被调用的。
+该函数的作用是为将要管理的“打开文件”分配一个物理页面的空间，初始当前目录（cwd）置为根目录，初始化打开文件计数（42--44行）；然后初始化所有“已打开”的文件的文件描述符fd（46--47行）。kernel/proc_file.c文件中还定义了一组接口，用于进程对文件的一系列操作。这些接口包括文件打开（do_open）、文件关闭（do_close）、文件读取（do_read）、文件写（do_write）、文件读写定位（do_lseek）、获取文件状态（do_stat），甚至获取磁盘状态（do_disk_stat）。这些接口，都是在应用程序发出对应的文件操作（如open、close、read_u等）时，通过user lib，到达do_syscall，并最后被调用的。
 
 这里，我们对其中比较典型的文件操作，如打开和文件读进行分析。我们先来观察do_open的实现（见kernel/proc_file.c）：
 
 ```c
-083 int do_open(char *pathname, int flags) {
-084   struct file *opened_file = NULL;
-085   if ((opened_file = vfs_open(pathname, flags)) == NULL) return -1;
-086 
-087   int fd = 0;
-088   struct file *pfile;
-089   for (fd = 0; fd < MAX_FILES; ++fd) {
-090     pfile = &(current->pfiles->opened_files[fd]);
-091     if (pfile->status == FD_NONE) break;
-092   }
-093   if (pfile->status != FD_NONE)  // no free entry
-094     panic("do_open: no file entry for current process!\n");
-095 
-096   // initialize this file structure
-097   memcpy(pfile, opened_file, sizeof(struct file));
-098 
-099   ++current->pfiles->nfiles;
+ 82 int do_open(char *pathname, int flags) {
+ 83   struct file *opened_file = NULL;
+ 84   if ((opened_file = vfs_open(pathname, flags)) == NULL) return -1;
+ 85 
+ 86   int fd = 0;
+ 87   if (current->pfiles->nfiles >= MAX_FILES) {
+ 88     panic("do_open: no file entry for current process!\n");
+ 89   }
+ 90   struct file *pfile;
+ 91   for (fd = 0; fd < MAX_FILES; ++fd) {
+ 92     pfile = &(current->pfiles->opened_files[fd]);
+ 93     if (pfile->status == FD_NONE) break;
+ 94   }
+ 95 
+ 96   // initialize this file structure
+ 97   memcpy(pfile, opened_file, sizeof(struct file));
+ 98 
+ 99   ++current->pfiles->nfiles;
 100   return fd;
 101 }
 ```
 
-我们看到，打开文件时，PKE内核是通过调用vfs_open函数来实现对一个文件的打开动作的（第85行）。在文件打开后，会在进程的“打开文件表”中寻找一个未被使用的表项，将其加入（拷贝）到该表项中（第87--100行）。我们再来观察另一个典型函数do_read的实现（见kernel/proc_file.c）：
+我们看到，打开文件时，PKE内核是通过调用vfs_open函数来实现对一个文件的打开动作的（第84行）。在文件打开后，会在进程的“打开文件表”中寻找一个未被使用的表项，将其加入（拷贝）到该表项中（第86--99行）。我们再来观察另一个典型函数do_read的实现（见kernel/proc_file.c）：
 
 ```c
 107 int do_read(int fd, char *buf, uint64 count) {
@@ -626,57 +629,57 @@ RFS实现了后两种钩子函数，函数名称以及完成的功能如下（�
 这里，我们回过头来，观察kernel/vfs.c中vfs_mount函数的定义：
 
 ```c
-049 struct super_block *vfs_mount(const char *dev_name, int mnt_type) {
-050   // device pointer
-051   struct device *p_device = NULL;
-052 
-053   // find the device entry in vfs_device_list named as dev_name
-054   for (int i = 0; i < MAX_VFS_DEV; ++i) {
-055     p_device = vfs_dev_list[i];
-056     if (p_device && strcmp(p_device->dev_name, dev_name) == 0) break;
-057   }
-058   if (p_device == NULL) panic("vfs_mount: cannot find the device entry!\n");
-059 
-060   // add the super block into vfs_sb_list
-061   struct file_system_type *fs_type = p_device->fs_type;
-062   struct super_block *sb = fs_type->get_superblock(p_device);
-063 
-064   // add the root vinode into vinode_hash_table
-065   hash_put_vinode(sb->s_root->dentry_inode);
-066 
-067   int err = 1;
-068   for (int i = 0; i < MAX_MOUNTS; ++i) {
-069     if (vfs_sb_list[i] == NULL) {
-070       vfs_sb_list[i] = sb;
-071       err = 0;
-072       break;
-073     }
-074   }
-075   if (err) panic("vfs_mount: too many mounts!\n");
-076 
-077   // mount the root dentry of the file system to right place
-078   if (mnt_type == MOUNT_AS_ROOT) {
-079     vfs_root_dentry = sb->s_root;
-080 
-081     // insert the mount point into hash table
-082     hash_put_dentry(sb->s_root);
-083   } else if (mnt_type == MOUNT_DEFAULT) {
-084     if (!vfs_root_dentry)
-085       panic("vfs_mount: root dentry not found, please mount the root device first!\n");
-086 
-087     struct dentry *mnt_point = sb->s_root;
-088 
-089     // set the mount point directory's name to device name
-090     char *dev_name = p_device->dev_name;
-091     strcpy(mnt_point->name, dev_name);
-092 
-093     // by default, it is mounted under the vfs root directory
-094     mnt_point->parent = vfs_root_dentry;
-095 
-096     // insert the mount point into hash table
-097     hash_put_dentry(sb->s_root);
-098   } else {
-099     panic("vfs_mount: unknown mount type!\n");
+ 49 struct super_block *vfs_mount(const char *dev_name, int mnt_type) {
+ 50   // device pointer
+ 51   struct device *p_device = NULL;
+ 52 
+ 53   // find the device entry in vfs_device_list named as dev_name
+ 54   for (int i = 0; i < MAX_VFS_DEV; ++i) {
+ 55     p_device = vfs_dev_list[i];
+ 56     if (p_device && strcmp(p_device->dev_name, dev_name) == 0) break;
+ 57   }
+ 58   if (p_device == NULL) panic("vfs_mount: cannot find the device entry!\n");
+ 59 
+ 60   // add the super block into vfs_sb_list
+ 61   struct file_system_type *fs_type = p_device->fs_type;
+ 62   struct super_block *sb = fs_type->get_superblock(p_device);
+ 63 
+ 64   // add the root vinode into vinode_hash_table
+ 65   hash_put_vinode(sb->s_root->dentry_inode);
+ 66 
+ 67   int err = 1;
+ 68   for (int i = 0; i < MAX_MOUNTS; ++i) {
+ 69     if (vfs_sb_list[i] == NULL) {
+ 70       vfs_sb_list[i] = sb;
+ 71       err = 0;
+ 72       break;
+ 73     }
+ 74   }
+ 75   if (err) panic("vfs_mount: too many mounts!\n");
+ 76 
+ 77   // mount the root dentry of the file system to right place
+ 78   if (mnt_type == MOUNT_AS_ROOT) {
+ 79     vfs_root_dentry = sb->s_root;
+ 80 
+ 81     // insert the mount point into hash table
+ 82     hash_put_dentry(sb->s_root);
+ 83   } else if (mnt_type == MOUNT_DEFAULT) {
+ 84     if (!vfs_root_dentry)
+ 85       panic("vfs_mount: root dentry not found, please mount the root device first!\n");
+ 86 
+ 87     struct dentry *mnt_point = sb->s_root;
+ 88 
+ 89     // set the mount point directory's name to device name
+ 90     char *dev_name = p_device->dev_name;
+ 91     strcpy(mnt_point->name, dev_name);
+ 92 
+ 93     // by default, it is mounted under the vfs root directory
+ 94     mnt_point->parent = vfs_root_dentry;
+ 95 
+ 96     // insert the mount point into hash table
+ 97     hash_put_dentry(sb->s_root);
+ 98   } else {
+ 99     panic("vfs_mount: unknown mount type!\n");
 100   }
 101 
 102   return sb;
@@ -1243,43 +1246,13 @@ System is shutting down with exit code 0.
 从程序的输出可以看出，Test 2中对RFS文件的写操作并未顺利返回。通过阅读app_file.c中的代码，我们可以发现Test 2执行了文件的打开、写入和关闭操作，其中文件的打开函数write_u并未顺利返回。该函数定义在user_lib.c文件中，从函数定义可以看出，打开文件操作对应着SYS_user_open系统调用。与之前实验中涉及到的系统调用一样，打开文件系统调用的处理函数同样被定义在syscall.c文件中：
 
 ```c
-88 ssize_t sys_user_open(char *pathva, int flags) {
-89   char* pathpa = (char*)user_va_to_pa((pagetable_t)(current->pagetable), pathva);
-90   return do_open(pathpa, flags);
-91 }
+101 ssize_t sys_user_open(char *pathva, int flags) {
+102   char* pathpa = (char*)user_va_to_pa((pagetable_t)(current->pagetable), pathva);
+103   return do_open(pathpa, flags);
+104 }
 ```
 
-该函数在对文件路径字符串地址进行虚地址到物理地址的转换后，会调用do_open函数完成余下的打开文件操作。do_open函数被定义在kernel/proc_file.c文件中：
-
-```c
-76 //
-77 // open a file named as "pathname" with the permission of "flags".
-78 // return: -1 on failure; non-zero file-descriptor on success.
-79 //
-80 int do_open(char *pathname, int flags) {
-81   struct file *opened_file = NULL;
-82   if ((opened_file = vfs_open(pathname, flags)) == NULL) return -1;
-83 
-84   int fd = 0;
-85   struct file *pfile;
-86   for (fd = 0; fd < MAX_FILES; ++fd) {
-87     pfile = &(current->pfiles->opened_files[fd]);
-88     if (pfile->status == FD_NONE) break;
-89   }
-90   if (pfile->status != FD_NONE)  // no free entry
-91     panic("do_open: no file entry for current process!\n");
-92 
-93   // initialize this file structure
-94   memcpy(pfile, opened_file, sizeof(struct file));
-95 
-96   ++current->pfiles->nfiles;
-97   return fd;
-98 }
-```
-
-第82行，通过调用vfs_open函数打开文件，并获取该文件的file对象；第84--96行，为打开的文件分配一个文件描述符，并将新文件的file结构保存到进程的打开文件列表中；最后返回文件描述符。
-
-其中82行调用的vfs_open函数是打开文件的关键，该函数的完整功能已在前文虚拟文件系统小节中进行了介绍。由于在Test 2中打开的文件`/RAMDISK0/ramfile`是不存在的，所以vfs_open函数会调用viop_create函数进行创建。viop_create在RFS中的实现为rfs_create，其定义在kernel/rfs.c文件中：
+该函数在对文件路径字符串地址进行虚地址到物理地址的转换后，会调用do_open函数完成余下的打开文件操作。do_open函数在前文中已经进行过介绍，其通过调用vfs_open函数打开文件，并获取该文件的file对象。vfs_open函数的完整功能也已在前文虚拟文件系统小节中进行了介绍。由于在Test 2中打开的文件`/RAMDISK0/ramfile`是不存在的，所以vfs_open函数会调用viop_create函数进行创建。viop_create在RFS中的实现为rfs_create，其定义在kernel/rfs.c文件中：
 
 ```c
 456 //
@@ -1563,145 +1536,145 @@ System is shutting down with exit code 0.
 可见其对应SYS_user_opendir系统调用，在kernel/syscall.c中找到该系统调用的定义：
 
 ```c
-160 ssize_t sys_user_opendir(char * pathva){
-161   char * pathpa = (char*)user_va_to_pa((pagetable_t)(current->pagetable), pathva);
-162   return do_opendir(pathpa);
-163 }
+171 ssize_t sys_user_opendir(char * pathva){
+172   char * pathpa = (char*)user_va_to_pa((pagetable_t)(current->pagetable), pathva);
+173   return do_opendir(pathpa);
+174 }
 ```
 
 该函数完成虚拟地址到物理地址的转换后，调用do_opendir完成打开目录文件的功能。do_opendir定义在kernel/proc_file.c中：
 
 ```c
-165 int do_opendir(char *pathname) {
-166   struct file *opened_file = NULL;
-167   if ((opened_file = vfs_opendir(pathname)) == NULL) return -1;
-168 
-169   int fd = 0;
-170   struct file *pfile;
-171   for (fd = 0; fd < MAX_FILES; ++fd) {
-172     pfile = &(current->pfiles->opened_files[fd]);
-173     if (pfile->status == FD_NONE) break;
-174   }
-175   if (pfile->status != FD_NONE)  // no free entry
-176     panic("do_opendir: no file entry for current process!\n");
-177 
-178   // initialize this file structure
-179   memcpy(pfile, opened_file, sizeof(struct file));
+168 int do_opendir(char *pathname) {
+169   struct file *opened_file = NULL;
+170   if ((opened_file = vfs_opendir(pathname)) == NULL) return -1;
+171 
+172   int fd = 0;
+173   struct file *pfile;
+174   for (fd = 0; fd < MAX_FILES; ++fd) {
+175     pfile = &(current->pfiles->opened_files[fd]);
+176     if (pfile->status == FD_NONE) break;
+177   }
+178   if (pfile->status != FD_NONE)  // no free entry
+179     panic("do_opendir: no file entry for current process!\n");
 180 
-181   ++current->pfiles->nfiles;
-182   return fd;
-183 }
+181   // initialize this file structure
+182   memcpy(pfile, opened_file, sizeof(struct file));
+183 
+184   ++current->pfiles->nfiles;
+185   return fd;
+186 }
 ```
 
-该函数主要在第167行调用vfs_opendir函数完成打开目录文件的功能，其余部分与前文中do_open基本一致。继续在kernel/vfs.c中找到vfs_opendir函数：
+该函数主要在第170行调用vfs_opendir函数完成打开目录文件的功能，其余部分与前文中do_open基本一致。继续在kernel/vfs.c中找到vfs_opendir函数：
 
 ```c
-279 struct file *vfs_opendir(const char *path) {
-280   struct dentry *parent = vfs_root_dentry;
-281   char miss_name[MAX_PATH_LEN];
-282 
-283   // lookup the dir
-284   struct dentry *file_dentry = lookup_final_dentry(path, &parent, miss_name);
-285 
-286   if (!file_dentry || file_dentry->dentry_inode->type != DIR_I) {
-287     sprint("vfs_opendir: cannot find the direntry!\n");
-288     return NULL;
-289   }
-290 
-291   // allocate a vfs file with readable/non-writable flag.
-292   struct file *file = alloc_vfs_file(file_dentry, 1, 0, 0);
-293 
-294   // additional open direntry operations for a specific file system
-295   // rfs needs duild dir cache.
-296   if (file_dentry->dentry_inode->i_ops->viop_hook_opendir) {
-297     if (file_dentry->dentry_inode->i_ops->
-298         viop_hook_opendir(file_dentry->dentry_inode, file_dentry) != 0) {
-299       sprint("vfs_opendir: hook opendir failed!\n");
-300     }
-301   }
-302 
-303   return file;
-304 }
+302 struct file *vfs_opendir(const char *path) {
+303   struct dentry *parent = vfs_root_dentry;
+304   char miss_name[MAX_PATH_LEN];
+305 
+306   // lookup the dir
+307   struct dentry *file_dentry = lookup_final_dentry(path, &parent, miss_name);
+308 
+309   if (!file_dentry || file_dentry->dentry_inode->type != DIR_I) {
+310     sprint("vfs_opendir: cannot find the direntry!\n");
+311     return NULL;
+312   }
+313 
+314   // allocate a vfs file with readable/non-writable flag.
+315   struct file *file = alloc_vfs_file(file_dentry, 1, 0, 0);
+316 
+317   // additional open direntry operations for a specific file system
+318   // rfs needs duild dir cache.
+319   if (file_dentry->dentry_inode->i_ops->viop_hook_opendir) {
+320     if (file_dentry->dentry_inode->i_ops->
+321         viop_hook_opendir(file_dentry->dentry_inode, file_dentry) != 0) {
+322       sprint("vfs_opendir: hook opendir failed!\n");
+323     }
+324   }
+325 
+326   return file;
+327 }
 ```
 
-该函数在第284行调用lookup_final_dentry在目录树中查找目标目录文件，获得其对应的dentry，之后在第292行分配一个关联该dentry的file对象返回。这两步其实与打开一个已存在的普通文件的过程相同。值得注意的是，在vfs_opendir函数的最后（第296--301行）调用了钩子函数：viop_hook_opendir。根据前文虚拟文件系统小节中对钩子函数的解释，RFS定义了viop_hook_opendir的具体函数实现：rfs_hook_opendir，因此，rfs_hook_opendir函数会在vfs_opendir的最后被调用。rfs_hook_opendir定义在kernel/rfs.c文件中：
+该函数在第307行调用lookup_final_dentry在目录树中查找目标目录文件，获得其对应的dentry，之后在第315行分配一个关联该dentry的file对象返回。这两步其实与打开一个已存在的普通文件的过程相同。值得注意的是，在vfs_opendir函数的最后（第319--324行）调用了钩子函数：viop_hook_opendir。根据前文虚拟文件系统小节中对钩子函数的解释，RFS定义了viop_hook_opendir的具体函数实现：rfs_hook_opendir，因此，rfs_hook_opendir函数会在vfs_opendir的最后被调用。rfs_hook_opendir定义在kernel/rfs.c文件中：
 
 ```c
+574 //
+575 // when a directory is opened, the contents of the directory file are read
+576 // into the memory for directory read operations
 577 //
-578 // when a directory is opened, the contents of the directory file are read
-579 // into the memory for directory read operations
-580 //
-581 int rfs_hook_opendir(struct vinode *dir_vinode, struct dentry *dentry) {
-582   // allocate space and read the contents of the dir block into memory
-583   void *pdire = NULL;
-584   void *previous = NULL;
-585   struct rfs_device *rdev = rfs_device_list[dir_vinode->sb->s_dev->dev_id];
-586 
-587   // read-in the directory file, store all direntries in dir cache.
-588   for (int i = dir_vinode->blocks - 1; i >= 0; i--) {
-589     previous = pdire;
-590     pdire = alloc_page();
+578 int rfs_hook_opendir(struct vinode *dir_vinode, struct dentry *dentry) {
+579   // allocate space and read the contents of the dir block into memory
+580   void *pdire = NULL;
+581   void *previous = NULL;
+582   struct rfs_device *rdev = rfs_device_list[dir_vinode->sb->s_dev->dev_id];
+583 
+584   // read-in the directory file, store all direntries in dir cache.
+585   for (int i = dir_vinode->blocks - 1; i >= 0; i--) {
+586     previous = pdire;
+587     pdire = alloc_page();
+588 
+589     if (previous != NULL && previous - pdire != RFS_BLKSIZE)
+590       panic("rfs_hook_opendir: memory discontinuity");
 591 
-592     if (previous != NULL && previous - pdire != RFS_BLKSIZE)
-593       panic("rfs_hook_opendir: memory discontinuity");
-594 
-595     rfs_r1block(rdev, dir_vinode->addrs[i]);
-596     memcpy(pdire, rdev->iobuffer, RFS_BLKSIZE);
-597   }
-598 
-599   // save the pointer to the directory block in the vinode
-600   struct rfs_dir_cache *dir_cache = (struct rfs_dir_cache *)alloc_page();
-601   dir_cache->block_count = dir_vinode->blocks;
-602   dir_cache->dir_base_addr = (struct rfs_direntry *)pdire;
-603 
-604   dir_vinode->i_fs_info = dir_cache;
-605 
-606   return 0;
-607 }
+592     rfs_r1block(rdev, dir_vinode->addrs[i]);
+593     memcpy(pdire, rdev->iobuffer, RFS_BLKSIZE);
+594   }
+595 
+596   // save the pointer to the directory block in the vinode
+597   struct rfs_dir_cache *dir_cache = (struct rfs_dir_cache *)alloc_page();
+598   dir_cache->block_count = dir_vinode->blocks;
+599   dir_cache->dir_base_addr = (struct rfs_direntry *)pdire;
+600 
+601   dir_vinode->i_fs_info = dir_cache;
+602 
+603   return 0;
+604 }
 ```
 
-在第587--597行，该函数读取了目录文件的所有数据块（由于alloc_page会从高地址向低地址分配内存，因此对目录文件数据块从后往前读取）；第599--602行将目录文件内容的地址和块数保存在dir_cache结构体中；第604行将dir_cache的地址保存在目录文件vinode的i_fs_info数据项中。该函数实际上将目录文件内的全部目录条目读入了dir_cache中，后续的读目录操作则直接从dir_cache中读取目录项并返回。
+在第585--594行，该函数读取了目录文件的所有数据块（由于alloc_page会从高地址向低地址分配内存，因此对目录文件数据块从后往前读取）；第597--599行将目录文件内容的地址和块数保存在dir_cache结构体中；第601行将dir_cache的地址保存在目录文件vinode的i_fs_info数据项中。该函数实际上将目录文件内的全部目录条目读入了dir_cache中，后续的读目录操作则直接从dir_cache中读取目录项并返回。
 
 RFS的读目录函数由rfs_readdir实现（按照上文跟踪opendir_u的过程，读者可以自行跟踪readdir_u函数的调用过程，最终会跟踪到rfs_readdir函数，这里不再赘述），该函数在kernel/rfs.c中实现：
 
 ```c
-624 //
-625 // read a directory entry from the directory "dir", and the "offset" indicate
-626 // the position of the entry to be read. if offset is 0, the first entry is read,
-627 // if offset is 1, the second entry is read, and so on.
-628 // return: 0 on success, -1 when there are no more entry (end of the list).
-629 //
-630 int rfs_readdir(struct vinode *dir_vinode, struct dir *dir, int *offset) {
-631   int total_direntrys = dir_vinode->size / sizeof(struct rfs_direntry);
-632   int one_block_direntrys = RFS_BLKSIZE / sizeof(struct rfs_direntry);
-633 
-634   int direntry_index = *offset;
-635   if (direntry_index >= total_direntrys) {
-636     // no more direntry
-637     return -1;
-638   }
-639 
-640   // reads a directory entry from the directory cache stored in vfs inode.
-641   struct rfs_dir_cache *dir_cache =
-642       (struct rfs_dir_cache *)dir_vinode->i_fs_info;
-643   struct rfs_direntry *p_direntry = dir_cache->dir_base_addr + direntry_index;
-644 
-645   // TODO (lab4_2): implement the code to read a directory entry.
-646   // hint: in the above code, we had found the directory entry that located at the
-647   // *offset, and used p_direntry to point it.
-648   // in the remaining processing, we need to return our discovery.
-649   // the method of returning is to popular proper members of "dir", more specifically,
-650   // dir->name and dir->inum.
-651   // note: DO NOT DELETE CODE BELOW PANIC.
-652   panic("You need to implement the code for reading a directory entry of rfs in lab4_2.\n" );
-653 
-654   // DO NOT DELETE CODE BELOW.
-655   (*offset)++;
-656   return 0;
-657 }
+621 //
+622 // read a directory entry from the directory "dir", and the "offset" indicate
+623 // the position of the entry to be read. if offset is 0, the first entry is read,
+624 // if offset is 1, the second entry is read, and so on.
+625 // return: 0 on success, -1 when there are no more entry (end of the list).
+626 //
+627 int rfs_readdir(struct vinode *dir_vinode, struct dir *dir, int *offset) {
+628   int total_direntrys = dir_vinode->size / sizeof(struct rfs_direntry);
+629   int one_block_direntrys = RFS_BLKSIZE / sizeof(struct rfs_direntry);
+630 
+631   int direntry_index = *offset;
+632   if (direntry_index >= total_direntrys) {
+633     // no more direntry
+634     return -1;
+635   }
+636 
+637   // reads a directory entry from the directory cache stored in vfs inode.
+638   struct rfs_dir_cache *dir_cache =
+639       (struct rfs_dir_cache *)dir_vinode->i_fs_info;
+640   struct rfs_direntry *p_direntry = dir_cache->dir_base_addr + direntry_index;
+641 
+642   // TODO (lab4_2): implement the code to read a directory entry.
+643   // hint: in the above code, we had found the directory entry that located at the
+644   // *offset, and used p_direntry to point it.
+645   // in the remaining processing, we need to return our discovery.
+646   // the method of returning is to popular proper members of "dir", more specifically,
+647   // dir->name and dir->inum.
+648   // note: DO NOT DELETE CODE BELOW PANIC.
+649   panic("You need to implement the code for reading a directory entry of rfs in lab4_2.\n" );
+650 
+651   // DO NOT DELETE CODE BELOW.
+652   (*offset)++;
+653   return 0;
+654 }
 ```
 
-在第641行，函数从目录文件vinode的i_fs_info中获取到dir_cache的地址；第643行，在预先读入的目录文件中，通过偏移量找到需要读取的rfs_direntry地址（p_direntry)；第645--652则是读者需要进行补全的代码。根据注释内容的提示，读者需要从dir_cache中读取目标rfs_direntry，并将其名称与对应的dinode号复制到dir中。
+在第638行，函数从目录文件vinode的i_fs_info中获取到dir_cache的地址；第640行，在预先读入的目录文件中，通过偏移量找到需要读取的rfs_direntry地址（p_direntry）；第642--649则是读者需要进行补全的代码。根据注释内容的提示，读者需要从dir_cache中读取目标rfs_direntry，并将其名称与对应的dinode号复制到dir中。
 
 完成目录的读取后，用户程序需要调用closedir_u函数关闭文件，该函数的调用过程由读者自行阅读。
 
@@ -1951,9 +1924,9 @@ System is shutting down with exit code 0.
 为了补全PKE文件系统的硬链接功能，我们可以从应用app_hardlinks.c开始查看link_u函数的调用关系。同之前实验的跟踪过程一样，我们可以在kernel/proc_file.c下找到link_u函数在文件系统中的实现：
 
 ```c
-211 int do_link(char *oldpath, char *newpath) {
-212   return vfs_link(oldpath, newpath);
-213 }
+214 int do_link(char *oldpath, char *newpath) {
+215   return vfs_link(oldpath, newpath);
+216 }
 ```
 
 该函数直接调用了vfs_link，在kernel/vfs.c中找到它的实现：
@@ -2010,29 +1983,29 @@ System is shutting down with exit code 0.
 284 }
 ```
 
-第245--246行在目录树中查找被链接的文件；第260--272行在目录树中查找将要创建的硬链接，确保其不与已存在的文件或目录名冲突；第276--277行调用viop_link函数来实现真正的创建硬链接操作。viop_link函数在RFS中的实现是rfs_link函数，其定义在kernel/rfs.c中：
+第267--268行在目录树中查找被链接的文件；第282--294行在目录树中查找将要创建的硬链接，确保其不与已存在的文件或目录名冲突；第298--299行调用viop_link函数来实现真正的创建硬链接操作。viop_link函数在RFS中的实现是rfs_link函数，其定义在kernel/rfs.c中：
 
 ```c
-579 //
-580 // create a hard link under a direntry "parent" for an existing file of "link_node"
-581 //
-582 int rfs_link(struct vinode *parent, struct dentry *sub_dentry, struct vinode *link_node) {
-583   // TODO (lab4_3): we now need to establish a hard link to an existing file whose vfs
-584   // inode is "link_node". To do that, we need first to know the name of the new (link)
-585   // file, and then, we need to increase the link count of the existing file. Lastly, 
-586   // we need to make the changes persistent to disk. To know the name of the new (link)
-587   // file, you need to stuty the structure of dentry, that contains the name member;
-588   // To incease the link count of the existing file, you need to study the structure of
-589   // vfs inode, since it contains the inode information of the existing file.
-590   //
-591   // hint: to accomplish this experiment, you need to:
-592   // 1) increase the link count of the file to be hard-linked;
-593   // 2) append the new (link) file as a dentry to its parent directory; you can use 
-594   //    rfs_add_direntry here.
-595   // 3) persistent the changes to disk. you can use rfs_write_back_vinode here.
-596   //
-597   panic("You need to implement the code for creating a hard link in lab4_3.\n" );
-598 }
+576 //
+577 // create a hard link under a direntry "parent" for an existing file of "link_node"
+578 //
+579 int rfs_link(struct vinode *parent, struct dentry *sub_dentry, struct vinode *link_node) {
+580   // TODO (lab4_3): we now need to establish a hard link to an existing file whose vfs
+581   // inode is "link_node". To do that, we need first to know the name of the new (link)
+582   // file, and then, we need to increase the link count of the existing file. Lastly, 
+583   // we need to make the changes persistent to disk. To know the name of the new (link)
+584   // file, you need to stuty the structure of dentry, that contains the name member;
+585   // To incease the link count of the existing file, you need to study the structure of
+586   // vfs inode, since it contains the inode information of the existing file.
+587   //
+588   // hint: to accomplish this experiment, you need to:
+589   // 1) increase the link count of the file to be hard-linked;
+590   // 2) append the new (link) file as a dentry to its parent directory; you can use 
+591   //    rfs_add_direntry here.
+592   // 3) persistent the changes to disk. you can use rfs_write_back_vinode here.
+593   //
+594   panic("You need to implement the code for creating a hard link in lab4_3.\n" );
+595 }
 ```
 
 此函数需要读者进行实现。根据注释的提示，在rfs_link函数中完成创建硬链接需要三步：
@@ -2207,6 +2180,12 @@ $ git commit -a -m "my work on lab4_3 is done."
   
   //继承lab3_3以及之前的答案
   $ git merge lab4_3_hardlink -m "continue to work on lab4_challenge1"
+  
+  //在完成代码修改后进行编译
+  $ make clean; make
+  
+  //运行程序
+  $ spike ./obj/riscv-pke ./obj/app_relativepath
   ```
 
   注意：**不同于基础实验，挑战实验的基础代码具有更大的不完整性，可能无法直接通过构造过程。**同样，不同于基础实验，我们在代码中也并未专门地哪些地方的代码需要填写，哪些地方的代码无须填写。这样，我们留给读者更大的“想象空间”。
@@ -2353,6 +2332,16 @@ $ git commit -a -m "my work on lab4_3 is done."
   
   //继承lab4_3以及之前的答案
   $ git merge lab4_3_hardlink -m "continue to work on lab4_challenge2"
+  
+  //在完成代码修改后进行编译
+  $ make clean; make
+  
+  //运行程序（根据实现方式的不同，运行命令可能有以下两种）
+  //1. 修改了PKE基础代码中加载主程序ELF文件的方式，改为通过VFS文件系统读取：
+  $ spike ./obj/riscv-pke /bin/app_exec
+  
+  //2. 未对PKE基础代码中加载主程序ELF文件的方式进行修改：
+  $ spike ./obj/riscv-pke ./obj/app_exec
   ```
 
   注意：**不同于基础实验，挑战实验的基础代码具有更大的不完整性，可能无法直接通过构造过程。**同样，不同于基础实验，我们在代码中也并未专门地哪些地方的代码需要填写，哪些地方的代码无须填写。这样，我们留给读者更大的“想象空间”。

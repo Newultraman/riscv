@@ -49,46 +49,108 @@
 接下来，PKE操作系统对进程的结构进行了扩充（见kernel/process.h文件）：
 
 ```C
- 58   // points to a page that contains mapped_regions. below are added @lab3_1
- 59   mapped_region *mapped_info;
- 60   // next free mapped region in mapped_info
- 61   int total_mapped_region;
- 62
- 63   // process id
- 64   uint64 pid;
- 65   // process status
- 66   int status;
- 67   // parent process
- 68   struct process_t *parent;
- 69   // next queue element
- 70   struct process_t *queue_next;
+73   // points to a page that contains mapped_regions. below are added @lab3_1
+74   mapped_region *mapped_info;
+75   // next free mapped region in mapped_info
+76   int total_mapped_region;
+77 
+78   // heap management
+79   process_heap_manager user_heap;
+80 
+81   // process id
+82   uint64 pid;
+83   // process status
+84   int status;
+85   // parent process
+86   struct process_t *parent;
+87   // next queue element
+88   struct process_t *queue_next;
 ```
 
 - 前两项mapped_info和total_mapped_region用于对进程的虚拟地址空间（中的代码段、堆栈段等）进行跟踪，这些虚拟地址空间在进程创建（fork）时，将发挥重要作用。同时，这也是lab3_1的内容。PKE将进程可能拥有的段分为以下几个类型：
 
 ```C
- 34 enum segment_type {
- 35   CODE_SEGMENT,    // ELF segment
- 36   DATA_SEGMENT,    // ELF segment
- 37   STACK_SEGMENT,   // runtime segment
- 38   CONTEXT_SEGMENT, // trapframe segment
- 39   SYSTEM_SEGMENT,  // system segment
- 40 };
+36 enum segment_type {
+37   STACK_SEGMENT = 0,   // runtime stack segment
+38   CONTEXT_SEGMENT, // trapframe segment
+39   SYSTEM_SEGMENT,  // system segment
+40   HEAP_SEGMENT,    // runtime heap segment
+41   CODE_SEGMENT,    // ELF segment
+42   DATA_SEGMENT,    // ELF segment
+43 };
 ```
 
-其中CODE_SEGMENT表示该段是从可执行ELF文件中加载的代码段，DATA_SEGMENT为从ELF文件中加载的数据段，STACK_SEGMENT为进程自身的栈段，CONTEXT_SEGMENT为保存进程上下文的trapframe所对应的段，SYSTEM_SEGMENT为进程的系统段，如所映射的异常处理段。
+其中STACK_SEGMENT为进程自身的栈段，CONTEXT_SEGMENT为保存进程上下文的trapframe所对应的段，SYSTEM_SEGMENT为进程的系统段，如所映射的异常处理段，HEAP_SEGMENT为进程的堆段，CODE_SEGMENT表示该段是从可执行ELF文件中加载的代码段，DATA_SEGMENT为从ELF文件中加载的数据段。
+
+* user_heap是用来管理进程堆段的数据结构，在实验3以及之后的实验中，PKE堆的实现发生了改变。由于多进程的存在，进程的堆不能再简单地实现为一个全局的数组。现在，每个进程有了一个专属的堆段：HEAP_SEGMENT，并新增了user_heap成员队进程的堆区进行管理。该结构体类型定义如下（位于kernel/process.h）：
+
+```c
+52 typedef struct process_heap_manager {
+53   // points to the last free page in our simple heap.
+54   uint64 heap_top;
+55   // points to the bottom of our simple heap.
+56   uint64 heap_bottom;
+57 
+58   // the address of free pages in the heap
+59   uint64 free_pages_address[MAX_HEAP_PAGES];
+60   // the number of free pages in the heap
+61   uint32 free_pages_count;
+62 }process_heap_manager;
+```
+
+该结构维护了当前进程堆的堆顶（heap_top）和堆底（heap_bottom），以及一个用来回收空闲块的数组（free_pages_address）。user_heap的初始化过程见后文alloc_process函数。另外，读者可以阅读位于kernel/syscall.c下的新的sys_user_allocate_page和sys_user_free_page系统调用，便于理解进程的堆区是如何维护的。
+
+sys_user_allocate_page的函数定义如下：
+
+```c
+45 uint64 sys_user_allocate_page() {
+46   void* pa = alloc_page();
+47   uint64 va;
+48   // if there are previously reclaimed pages, use them first (this does not change the
+49   // size of the heap)
+50   if (current->user_heap.free_pages_count > 0) {
+51     va =  current->user_heap.free_pages_address[--current->user_heap.free_pages_count];
+52     assert(va < current->user_heap.heap_top);
+53   } else {
+54     // otherwise, allocate a new page (this increases the size of the heap by one page)
+55     va = current->user_heap.heap_top;
+56     current->user_heap.heap_top += PGSIZE;
+57 
+58     current->mapped_info[HEAP_SEGMENT].npages++;
+59   }
+60   user_vm_map((pagetable_t)current->pagetable, va, PGSIZE, (uint64)pa,
+61          prot_to_type(PROT_WRITE | PROT_READ, 1));
+62 
+63   return va;
+64 }
+```
+
+在sys_user_allocate_page中，当用户尝试从堆上分配一块内存时，会首先在free_pages_address查看是否有被回收的块。如果有，则直接从free_pages_address中分配；如果没有，则扩展堆顶指针heap_top，分配新的页。
+
+sys_user_free_page的函数定义如下：
+
+```c
+69 uint64 sys_user_free_page(uint64 va) {
+70   user_vm_unmap((pagetable_t)current->pagetable, va, PGSIZE, 1);
+71   // add the reclaimed page to the free page list
+72   current->user_heap.free_pages_address[current->user_heap.free_pages_count++] = va;
+73   return 0;
+74 }
+```
+
+在sys_user_free_page中，当堆上的页被释放时，对应的物理页会被释放，并将相应的虚拟页地址暂存在free_pages_address数组中。
 
 - pid是进程的ID号，具有唯一性；
 - status记录了进程的状态，PKE操作系统在实验3给进程规定了以下几种状态：
 
 ```C
- 25 enum proc_status {
- 26   FREE,            // unused state
- 27   READY,           // ready state
- 28   RUNNING,         // currently running
- 29   BLOCKED,         // waiting for something
- 30   ZOMBIE,          // terminated but not reclaimed yet
- 31 };
+27 enum proc_status {
+28   FREE,            // unused state
+29   READY,           // ready state
+30   RUNNING,         // currently running
+31   BLOCKED,         // waiting for something
+32   ZOMBIE,          // terminated but not reclaimed yet
+33 };
 ```
 
 其中，FREE为自由态，表示进程结构可用；READY为就绪态，即进程所需的资源都已准备好，可以被调度执行；RUNNING表示该进程处于正在运行的状态；BLOCKED表示进程处于阻塞状态；ZOMBIE表示进程处于“僵尸”状态，进程的资源可以被释放和回收。
@@ -104,66 +166,77 @@
 PKE实验中，创建一个进程需要先调用kernel/process.c文件中的alloc_process()函数：
 
 ```C
- 92 process* alloc_process() {
- 93   // locate the first usable process structure
- 94   int i;
- 95
- 96   for( i=0; i<NPROC; i++ )
- 97     if( procs[i].status == FREE ) break;
- 98
- 99   if( i>=NPROC ){
-100     panic( "cannot find any free process structure.\n" );
-101     return 0;
-102   }
-103
-104   // init proc[i]'s vm space
-105   procs[i].trapframe = (trapframe *)alloc_page();  //trapframe, used to save context
-106   memset(procs[i].trapframe, 0, sizeof(trapframe));
-107
-108   // page directory
-109   procs[i].pagetable = (pagetable_t)alloc_page();
-110   memset((void *)procs[i].pagetable, 0, PGSIZE);
-111
-112   procs[i].kstack = (uint64)alloc_page() + PGSIZE;   //user kernel stack top
-113   uint64 user_stack = (uint64)alloc_page();       //phisical address of user stack bottom
-114   procs[i].trapframe->regs.sp = USER_STACK_TOP;  //virtual address of user stack top
-115
-116   // allocates a page to record memory regions (segments)
-117   procs[i].mapped_info = (mapped_region*)alloc_page();
-118   memset( procs[i].mapped_info, 0, PGSIZE );
-119
-120   // map user stack in userspace
-121   user_vm_map((pagetable_t)procs[i].pagetable, USER_STACK_TOP - PGSIZE, PGSIZE,
-122     user_stack, prot_to_type(PROT_WRITE | PROT_READ, 1));
-123   procs[i].mapped_info[0].va = USER_STACK_TOP - PGSIZE;
-124   procs[i].mapped_info[0].npages = 1;
-125   procs[i].mapped_info[0].seg_type = STACK_SEGMENT;
-126
-127   // map trapframe in user space (direct mapping as in kernel space).
-128   user_vm_map((pagetable_t)procs[i].pagetable, (uint64)procs[i].trapframe, PGSIZE,
-129     (uint64)procs[i].trapframe, prot_to_type(PROT_WRITE | PROT_READ, 0));
-130   procs[i].mapped_info[1].va = (uint64)procs[i].trapframe;
-131   procs[i].mapped_info[1].npages = 1;
-132   procs[i].mapped_info[1].seg_type = CONTEXT_SEGMENT;
-133
-134   // map S-mode trap vector section in user space (direct mapping as in kernel space)
-135   // we assume that the size of usertrap.S is smaller than a page.
-136   user_vm_map((pagetable_t)procs[i].pagetable, (uint64)trap_sec_start, PGSIZE,
-137     (uint64)trap_sec_start, prot_to_type(PROT_READ | PROT_EXEC, 0));
-138   procs[i].mapped_info[2].va = (uint64)trap_sec_start;
-139   procs[i].mapped_info[2].npages = 1;
-140   procs[i].mapped_info[2].seg_type = SYSTEM_SEGMENT;
-141
-142   sprint("in alloc_proc. user frame 0x%lx, user stack 0x%lx, user kstack 0x%lx \n",
-143     procs[i].trapframe, procs[i].trapframe->regs.sp, procs[i].kstack);
-144
-145   procs[i].total_mapped_region = 3;
-146   // return after initialization.
-147   return &procs[i];
-148 }
+ 89 process* alloc_process() {
+ 90   // locate the first usable process structure
+ 91   int i;
+ 92 
+ 93   for( i=0; i<NPROC; i++ )
+ 94     if( procs[i].status == FREE ) break;
+ 95 
+ 96   if( i>=NPROC ){
+ 97     panic( "cannot find any free process structure.\n" );
+ 98     return 0;
+ 99   }
+100 
+101   // init proc[i]'s vm space
+102   procs[i].trapframe = (trapframe *)alloc_page();  //trapframe, used to save context
+103   memset(procs[i].trapframe, 0, sizeof(trapframe));
+104 
+105   // page directory
+106   procs[i].pagetable = (pagetable_t)alloc_page();
+107   memset((void *)procs[i].pagetable, 0, PGSIZE);
+108 
+109   procs[i].kstack = (uint64)alloc_page() + PGSIZE;   //user kernel stack top
+110   uint64 user_stack = (uint64)alloc_page();       //phisical address of user stack bottom
+111   procs[i].trapframe->regs.sp = USER_STACK_TOP;  //virtual address of user stack top
+112 
+113   // allocates a page to record memory regions (segments)
+114   procs[i].mapped_info = (mapped_region*)alloc_page();
+115   memset( procs[i].mapped_info, 0, PGSIZE );
+116 
+117   // map user stack in userspace
+118   user_vm_map((pagetable_t)procs[i].pagetable, USER_STACK_TOP - PGSIZE, PGSIZE,
+119     user_stack, prot_to_type(PROT_WRITE | PROT_READ, 1));
+120   procs[i].mapped_info[STACK_SEGMENT].va = USER_STACK_TOP - PGSIZE;
+121   procs[i].mapped_info[STACK_SEGMENT].npages = 1;
+122   procs[i].mapped_info[STACK_SEGMENT].seg_type = STACK_SEGMENT;
+123 
+124   // map trapframe in user space (direct mapping as in kernel space).
+125   user_vm_map((pagetable_t)procs[i].pagetable, (uint64)procs[i].trapframe, PGSIZE,
+126     (uint64)procs[i].trapframe, prot_to_type(PROT_WRITE | PROT_READ, 0));
+127   procs[i].mapped_info[CONTEXT_SEGMENT].va = (uint64)procs[i].trapframe;
+128   procs[i].mapped_info[CONTEXT_SEGMENT].npages = 1;
+129   procs[i].mapped_info[CONTEXT_SEGMENT].seg_type = CONTEXT_SEGMENT;
+130 
+131   // map S-mode trap vector section in user space (direct mapping as in kernel space)
+132   // we assume that the size of usertrap.S is smaller than a page.
+133   user_vm_map((pagetable_t)procs[i].pagetable, (uint64)trap_sec_start, PGSIZE,
+134     (uint64)trap_sec_start, prot_to_type(PROT_READ | PROT_EXEC, 0));
+135   procs[i].mapped_info[SYSTEM_SEGMENT].va = (uint64)trap_sec_start;
+136   procs[i].mapped_info[SYSTEM_SEGMENT].npages = 1;
+137   procs[i].mapped_info[SYSTEM_SEGMENT].seg_type = SYSTEM_SEGMENT;
+138 
+139   sprint("in alloc_proc. user frame 0x%lx, user stack 0x%lx, user kstack 0x%lx \n",
+140     procs[i].trapframe, procs[i].trapframe->regs.sp, procs[i].kstack);
+141 
+142   // initialize the process's heap manager
+143   procs[i].user_heap.heap_top = USER_FREE_ADDRESS_START;
+144   procs[i].user_heap.heap_bottom = USER_FREE_ADDRESS_START;
+145   procs[i].user_heap.free_pages_count = 0;
+146 
+147   // map user heap in userspace
+148   procs[i].mapped_info[HEAP_SEGMENT].va = USER_FREE_ADDRESS_START;
+149   procs[i].mapped_info[HEAP_SEGMENT].npages = 0;  // no pages are mapped to heap yet.
+150   procs[i].mapped_info[HEAP_SEGMENT].seg_type = HEAP_SEGMENT;
+151 
+152   procs[i].total_mapped_region = 4;
+153 
+154   // return after initialization.
+155   return &procs[i];
+156 }
 ```
 
-通过以上代码，可以发现alloc_process()函数除了找到一个空的进程结构外，还为新创建的进程建立了KERN_BASE以上逻辑地址的映射（这段代码在实验3之前位于kernel/kernel.c文件的load_user_program()函数中），并将映射信息保存到了进程结构中。
+通过以上代码，可以发现alloc_process()函数除了找到一个空的进程结构外，还为新创建的进程建立了KERN_BASE以上逻辑地址的映射（这段代码在实验3之前位于kernel/kernel.c文件的load_user_program()函数中，在本实验中还额外添加了HEAP_SEGMENT段的映射），并将映射信息保存到了进程结构中。
 
 对于给定应用，PKE将通过调用load_bincode_from_host_elf()函数载入给定应用对应的ELF文件的各个段。之后被调用的elf_load()函数在载入段后，将对被载入的段进行判断，以记录它们的虚地址映射：
 
@@ -219,40 +292,40 @@ PKE实验中，创建一个进程需要先调用kernel/process.c文件中的allo
 接下来，将通过switch_to()函数将所构造的进程投入执行：
 
 ```c
- 41 void switch_to(process* proc) {
- 42   assert(proc);
- 43   current = proc;
- 44
- 45   // write the smode_trap_vector (64-bit func. address) defined in kernel/strap_vector.S
- 46   // to the stvec privilege register, such that trap handler pointed by smode_trap_vector
- 47   // will be triggered when an interrupt occurs in S mode.
- 48   write_csr(stvec, (uint64)smode_trap_vector);
- 49
- 50   // set up trapframe values (in process structure) that smode_trap_vector will need when
- 51   // the process next re-enters the kernel.
- 52   proc->trapframe->kernel_sp = proc->kstack;      // process's kernel stack
- 53   proc->trapframe->kernel_satp = read_csr(satp);  // kernel page table
- 54   proc->trapframe->kernel_trap = (uint64)smode_trap_handler;
- 55
- 56   // SSTATUS_SPP and SSTATUS_SPIE are defined in kernel/riscv.h
- 57   // set S Previous Privilege mode (the SSTATUS_SPP bit in sstatus register) to User mode.
- 58   unsigned long x = read_csr(sstatus);
- 59   x &= ~SSTATUS_SPP;  // clear SPP to 0 for user mode
- 60   x |= SSTATUS_SPIE;  // enable interrupts in user mode
- 61
- 62   // write x back to 'sstatus' register to enable interrupts, and sret destination mode.
- 63   write_csr(sstatus, x);
- 64
- 65   // set S Exception Program Counter (sepc register) to the elf entry pc.
- 66   write_csr(sepc, proc->trapframe->epc);
- 67
- 68   // make user page table. macro MAKE_SATP is defined in kernel/riscv.h. added @lab2_1
- 69   uint64 user_satp = MAKE_SATP(proc->pagetable);
- 70
- 71   // return_to_user() is defined in kernel/strap_vector.S. switch to user mode with sret.
- 72   // note, return_to_user takes two parameters @ and after lab2_1.
- 73   return_to_user(proc->trapframe, user_satp);
- 74 }
+38 void switch_to(process* proc) {
+39   assert(proc);
+40   current = proc;
+41 
+42   // write the smode_trap_vector (64-bit func. address) defined in kernel/strap_vector.S
+43   // to the stvec privilege register, such that trap handler pointed by smode_trap_vector
+44   // will be triggered when an interrupt occurs in S mode.
+45   write_csr(stvec, (uint64)smode_trap_vector);
+46 
+47   // set up trapframe values (in process structure) that smode_trap_vector will need when
+48   // the process next re-enters the kernel.
+49   proc->trapframe->kernel_sp = proc->kstack;      // process's kernel stack
+50   proc->trapframe->kernel_satp = read_csr(satp);  // kernel page table
+51   proc->trapframe->kernel_trap = (uint64)smode_trap_handler;
+52 
+53   // SSTATUS_SPP and SSTATUS_SPIE are defined in kernel/riscv.h
+54   // set S Previous Privilege mode (the SSTATUS_SPP bit in sstatus register) to User mode.
+55   unsigned long x = read_csr(sstatus);
+56   x &= ~SSTATUS_SPP;  // clear SPP to 0 for user mode
+57   x |= SSTATUS_SPIE;  // enable interrupts in user mode
+58 
+59   // write x back to 'sstatus' register to enable interrupts, and sret destination mode.
+60   write_csr(sstatus, x);
+61 
+62   // set S Exception Program Counter (sepc register) to the elf entry pc.
+63   write_csr(sepc, proc->trapframe->epc);
+64 
+65   // make user page table. macro MAKE_SATP is defined in kernel/riscv.h. added @lab2_1
+66   uint64 user_satp = MAKE_SATP(proc->pagetable);
+67 
+68   // return_to_user() is defined in kernel/strap_vector.S. switch to user mode with sret.
+69   // note, return_to_user takes two parameters @ and after lab2_1.
+70   return_to_user(proc->trapframe, user_satp);
+71 }
 ```
 
 实际上，以上函数在[实验1](chapter3_traps.md)就有所涉及，它的作用是将进程结构中的trapframe作为进程上下文恢复到RISC-V机器的通用寄存器中，并最后调用sret指令（通过return_to_user()函数）将进程投入执行。
@@ -272,15 +345,15 @@ PKE实验中，创建一个进程需要先调用kernel/process.c文件中的allo
 可以看到，如果某进程调用了exit()系统调用，操作系统的处理方法是调用free_process()函数，将当前进程（也就是调用者）进行“释放”，然后转进程调度。其中free_process()函数（kernel/process.c文件）的实现非常简单：
 
 ```c
-153 int free_process( process* proc ) {
-154   // we set the status to ZOMBIE, but cannot destruct its vm space immediately.
-155   // since proc can be current process, and its user kernel stack is currently in use!
-156   // but for proxy kernel, it (memory leaking) may NOT be a really serious issue,
-157   // as it is different from regular OS, which needs to run 7x24.
-158   proc->status = ZOMBIE;
-159
-160   return 0;
-161 }
+161 int free_process( process* proc ) {
+162   // we set the status to ZOMBIE, but cannot destruct its vm space immediately.
+163   // since proc can be current process, and its user kernel stack is currently in use!
+164   // but for proxy kernel, it (memory leaking) may NOT be a really serious issue,
+165   // as it is different from regular OS, which needs to run 7x24.
+166   proc->status = ZOMBIE;
+167 
+168   return 0;
+169 }
 ```
 
 可以看到，**free_process()函数仅是将进程设为ZOMBIE状态，而不会将进程所占用的资源全部释放**！这是因为free_process()函数的调用，说明操作系统当前是在S模式下运行，而按照PKE的设计思想，S态的运行将使用当前进程的用户系统栈（user kernel stack）。此时，如果将当前进程的内存空间进行释放，将导致操作系统本身的崩溃。所以释放进程时，PKE采用的是折衷的办法，即只将其设置为僵尸（ZOMBIE）状态，而不是立即将它所占用的资源进行释放。最后，schedule()函数的调用，将选择系统中可能存在的其他处于就绪状态的进程投入运行，它的处理逻辑我们将在下一节讨论。
@@ -518,48 +591,86 @@ user/app_naive_fork.c --> user/user_lib.c --> kernel/strap_vector.S --> kernel/s
 直至跟踪到kernel/process.c文件中的do_fork()函数：
 
 ```c
-170 int do_fork( process* parent)
-171 {
-172   sprint( "will fork a child from parent %d.\n", parent->pid );
-173   process* child = alloc_process();
-174
-175   for( int i=0; i<parent->total_mapped_region; i++ ){
-176     // browse parent's vm space, and copy its trapframe and data segments,
-177     // map its code segment.
-178     switch( parent->mapped_info[i].seg_type ){
-179       case CONTEXT_SEGMENT:
-180         *child->trapframe = *parent->trapframe;
-181         break;
-182       case STACK_SEGMENT:
-183         memcpy( (void*)lookup_pa(child->pagetable, child->mapped_info[0].va),
-184           (void*)lookup_pa(parent->pagetable, parent->mapped_info[i].va), PGSIZE );
-185         break;
-186       case CODE_SEGMENT:
-187         // TODO (lab3_1): implment the mapping of child code segment to parent's
-188         // code segment.
-189         // hint: the virtual address mapping of code segment is tracked in mapped_info
-190         // page of parent's process structure. use the information in mapped_info to
-191         // retrieve the virtual to physical mapping of code segment.
-192         // after having the mapping information, just map the corresponding virtual
-193         // address region of child to the physical pages that actually store the code
-194         // segment of parent process.
-195         // DO NOT COPY THE PHYSICAL PAGES, JUST MAP THEM.
-196         panic( "You need to implement the code segment mapping of child in lab3_1.\n" );
-197
-198         // after mapping, register the vm region (do not delete codes below!)
-199         child->mapped_info[child->total_mapped_region].va = parent->mapped_info[i].va;
-200         child->mapped_info[child->total_mapped_region].npages =
-201           parent->mapped_info[i].npages;
-202         child->mapped_info[child->total_mapped_region].seg_type = CODE_SEGMENT;
-203         child->total_mapped_region++;
-204         break;
-205     }
-206   }
+178 int do_fork( process* parent)
+179 {
+180   sprint( "will fork a child from parent %d.\n", parent->pid );
+181   process* child = alloc_process();
+182 
+183   for( int i=0; i<parent->total_mapped_region; i++ ){
+184     // browse parent's vm space, and copy its trapframe and data segments,
+185     // map its code segment.
+186     switch( parent->mapped_info[i].seg_type ){
+187       case CONTEXT_SEGMENT:
+188         *child->trapframe = *parent->trapframe;
+189         break;
+190       case STACK_SEGMENT:
+191         memcpy( (void*)lookup_pa(child->pagetable, child->mapped_info[STACK_SEGMENT].va),
+192           (void*)lookup_pa(parent->pagetable, parent->mapped_info[i].va), PGSIZE );
+193         break;
+194       case HEAP_SEGMENT:
+195         // build a same heap for child process.
+196 
+197         // convert free_pages_address into a filter to skip reclaimed blocks in the heap
+198         // when mapping the heap blocks
+199         int free_block_filter[MAX_HEAP_PAGES];
+200         memset(free_block_filter, 0, MAX_HEAP_PAGES);
+201         uint64 heap_bottom = parent->user_heap.heap_bottom;
+202         for (int i = 0; i < parent->user_heap.free_pages_count; i++) {
+203           int index = (parent->user_heap.free_pages_address[i] - heap_bottom) / PGSIZE;
+204           free_block_filter[index] = 1;
+205         }
+206 
+207         // copy and map the heap blocks
+208         for (uint64 heap_block = current->user_heap.heap_bottom;
+209              heap_block < current->user_heap.heap_top; heap_block += PGSIZE) {
+210           if (free_block_filter[(heap_block - heap_bottom) / PGSIZE])  // skip free blocks
+211             continue;
+212 
+213           void* child_pa = alloc_page();
+214           memcpy(child_pa, (void*)lookup_pa(parent->pagetable, heap_block), PGSIZE);
+215           user_vm_map((pagetable_t)child->pagetable, heap_block, PGSIZE, (uint64)child_pa,
+216                       prot_to_type(PROT_WRITE | PROT_READ, 1));
+217         }
+218 
+219         child->mapped_info[HEAP_SEGMENT].npages = parent->mapped_info[HEAP_SEGMENT].npages;
+220 
+221         // copy the heap manager from parent to child
+222         memcpy((void*)&child->user_heap, (void*)&parent->user_heap, sizeof(parent->user_heap));
+223         break;
+224       case CODE_SEGMENT:
+225         // TODO (lab3_1): implment the mapping of child code segment to parent's
+226         // code segment.
+227         // hint: the virtual address mapping of code segment is tracked in mapped_info
+228         // page of parent's process structure. use the information in mapped_info to
+229         // retrieve the virtual to physical mapping of code segment.
+230         // after having the mapping information, just map the corresponding virtual
+231         // address region of child to the physical pages that actually store the code
+232         // segment of parent process.
+233         // DO NOT COPY THE PHYSICAL PAGES, JUST MAP THEM.
+234         panic( "You need to implement the code segment mapping of child in lab3_1.\n" );
+235 
+236         // after mapping, register the vm region (do not delete codes below!)
+237         child->mapped_info[child->total_mapped_region].va = parent->mapped_info[i].va;
+238         child->mapped_info[child->total_mapped_region].npages =
+239           parent->mapped_info[i].npages;
+240         child->mapped_info[child->total_mapped_region].seg_type = CODE_SEGMENT;
+241         child->total_mapped_region++;
+242         break;
+243     }
+244   }
+245 
+246   child->status = READY;
+247   child->trapframe->regs.a0 = 0;
+248   child->parent = parent;
+249   insert_to_ready_queue( child );
+250 
+251   return child->pid;
+252 }
 ```
 
-该函数使用第175--205行的循环来拷贝父进程的逻辑地址空间到其子进程。我们看到，对于trapframe段（case CONTEXT_SEGMENT）以及堆栈段（case STACK_SEGMENT），do_fork()函数采用了简单复制的办法来拷贝父进程的这两个段到子进程中，这样做的目的是将父进程的执行现场传递给子进程。
+该函数使用第183--244行的循环来拷贝父进程的逻辑地址空间到其子进程。我们看到，对于trapframe段（case CONTEXT_SEGMENT）以及栈段（case STACK_SEGMENT），do_fork()函数采用了简单复制的办法来拷贝父进程的这两个段到子进程中，这样做的目的是将父进程的执行现场传递给子进程。对于堆段（case HEAP_SEGMENT），堆中存在两种状态的虚拟页面：未被释放的页面（位于当前进程的user_heap.heap_bottom与user_heap.heap_top之间，但不在user_heap.free_pages_address数组中）和已被释放的页面（位于当前进程的user_heap.free_pages_address数组中），其中已被释放的页面不需要额外处理。而对于父进程中每一页未被释放的虚拟页面，需要首先分配一页空闲物理页，再将父进程中该页数据进行拷贝（第213--214行），然后将新分配的物理页映射到子进程的相同虚页（第215行）。处理完堆中的所有页面后，还需要拷贝父进程的mapped_info[HEAP_SEGMENT]和user_heap信息到其子进程（第219--222行）。
 
-然而，对于父进程的代码段，子进程应该如何“继承”呢？通过第187--195行的注释，我们知道对于代码段，我们不应直接复制（减少系统开销），而应通过映射的办法，将子进程中对应的逻辑地址空间映射到其父进程中装载代码段的物理页面。这里，就要回到[实验2内存管理](chapter4_memory.md#pagetablecook)部分，寻找合适的函数来实现了。注意对页面的权限设置（可读可执行）。
+然而，对于父进程的代码段，子进程应该如何“继承”呢？通过第225--233行的注释，我们知道对于代码段，我们不应直接复制（减少系统开销），而应通过映射的办法，将子进程中对应的逻辑地址空间映射到其父进程中装载代码段的物理页面。这里，就要回到[实验2内存管理](chapter4_memory.md#pagetablecook)部分，寻找合适的函数来实现了。注意对页面的权限设置（可读可执行）。
 
 
 
