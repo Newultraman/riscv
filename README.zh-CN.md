@@ -46,14 +46,13 @@
  - [5.5 lab3_challenge1 进程等待和数据段复制（难度：&#9733;&#9733;&#9734;&#9734;&#9734;）](chapter5_process.md#lab3_challenge1_wait) 
  - [5.6 lab3_challenge2 实现信号量（难度：&#9733;&#9733;&#9733;&#9734;&#9734;）](chapter5_process.md#lab3_challenge2_semaphore) 
 
-[第六章. PKE实验4：文件系统](chapter6_filesystem.md) ----- 课程资源：    [PPT](./resources/第六章.实验4：文件系统.pptx)        [视频讲解](https://www.bilibili.com/video/BV1Us4y1h7tT)
-
- - [6.1 实验4的基础知识](chapter6_filesystem.md#fundamental)  
- - [6.2 lab4_1 文件操作](chapter6_filesystem.md#lab4_1_file)  
- - [6.3 lab4_2 目录文件](chapter6_filesystem.md#lab4_2_dir)  
- - [6.4 lab4_3 硬链接](chapter6_filesystem.md#lab4_3_hardlink)  
- - [6.5 lab4_challenge1 相对路径（难度：&#9733;&#9733;&#9733;&#9734;&#9734;）](chapter6_filesystem.md#lab4_challenge1_pwd)
- - [6.6 lab4_challenge2 重载执行（难度：&#9733;&#9733;&#9733;&#9733;&#9734;）](chapter6_filesystem.md#lab4_challenge2_exec)
+[第六章. PKE实验4：文件系统](chapter6_filesystem.md) 
+ - [5.1 实验4的基础知识](chapter6_filesystem.md#fundamental)  
+ - [5.2 lab4_1 文件操作](chapter6_filesystem.md#lab4_1_file)  
+ - [5.3 lab4_2 目录文件](chapter6_filesystem.md#lab4_2_dir)  
+ - [5.4 lab4_3 硬链接](chapter6_filesystem.md#lab4_3_hardlink)  
+ - [5.5 lab4_challenge1 多级目录（难度：&#9733;&#9734;&#9734;&#9734;&#9734;）](chapter6_filesystem.md#lab4_challenge1_treedir) 
+ - [5.6 lab3_challenge2 虚拟文件系统（难度：&#9733;&#9733;&#9733;&#9733;&#9734;）](chapter6_filesystem.md#lab4_challenge2_vfs) 
 
 ## 第二部分：系统能力培养实验
 
@@ -64,7 +63,7 @@
 - [7.3 fpga实验2：以中断方式实现uart通信](chapter7_riscv_on_pynq.md#hardware_lab2)
 - [7.4 fpga实验3：配置连接到PS端的USB设备](chapter7_riscv_on_pynq.md#hardware_lab3)
 
-[第八章. PKE实验5：设备和文件](chapter8_device.md)  ----- 课程资源：    [PPT](./resources/第八章.实验4：设备管理.pptx)        [视频讲解](https://www.bilibili.com/video/BV1LB4y157Rb)
+[第八章. PKE实验5：设备管理](chapter8_device.md)  ----- 课程资源：    [PPT](./resources/第八章.实验4：设备管理.pptx)        [视频讲解](https://www.bilibili.com/video/BV1LB4y157Rb)
 
  - [8.1 实验5的基础知识](chapter8_device.md#fundamental)  
  - [8.2 lab5_1 轮询方式](chapter8_device.md#polling)  
